@@ -1,5 +1,15 @@
 #!/usr/bin/env bun
 
+// Runtime guard — Bun only, reject Node.js and Deno
+if (typeof globalThis.Bun === 'undefined') {
+	console.error('\x1b[31mError: Clopen requires Bun runtime.\x1b[0m');
+	console.error('Node.js and Deno are not supported.');
+	console.error('');
+	console.error('Install Bun: https://bun.sh');
+	console.error('Then run:    bun clopen');
+	process.exit(1);
+}
+
 /**
  * Clopen CLI Entry Point
  *
