@@ -35,7 +35,7 @@
 		isLastUserMessage?: boolean;
 		roleConfig: { gradient: string; icon: IconName; name: string };
 		roleCategory: 'user' | 'assistant' | 'agent' | string;
-		agentStatus: 'processing' | 'success' | 'error' | null;
+		agentStatus: 'processing' | 'waiting' | 'success' | 'error' | null;
 		senderName: string | null;
 		hasTokenUsageData: any;
 		formatTime: (timestamp?: string) => string;
@@ -75,6 +75,10 @@
 				{#if agentStatus === 'processing'}
 					<span title="Agent is processing...">
 						<Icon name="lucide:loader" class="w-3 h-3 text-violet-500 dark:text-violet-400 animate-spin" />
+					</span>
+				{:else if agentStatus === 'waiting'}
+					<span title="Waiting for your input...">
+						<Icon name="lucide:message-circle-question-mark" class="w-3 h-3 text-amber-500 dark:text-amber-400" />
 					</span>
 				{:else if agentStatus === 'success'}
 					<span title="Agent completed successfully">

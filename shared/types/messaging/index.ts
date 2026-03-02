@@ -65,6 +65,7 @@ import type { SDKUserMessage as _SDKUserMessage } from '@anthropic-ai/claude-age
 export type EngineSDKMessage = SDKMessage & {
   metadata?: {
     reasoning?: boolean;
+    interrupted?: boolean;
   };
 };
 
@@ -113,7 +114,7 @@ export type {
   ExitPlanModeToolInput,
   GlobToolInput,
   GrepToolInput,
-  KillShellToolInput,
+  TaskStopToolInput,
   ListMcpResourcesToolInput,
   NotebookEditToolInput,
   ReadMcpResourceToolInput,
@@ -123,30 +124,28 @@ export type {
   WebFetchToolInput,
   WebSearchToolInput,
   WriteToolInput,
+  AskUserQuestionToolInput,
+  ConfigToolInput,
+  EnterWorktreeToolInput,
   ToolInput,
 
-  // Tool output types
+  // Tool output types (from SDK)
   TaskOutput,
+  AskUserQuestionOutput,
   BashOutput,
-  BashOutputToolOutput,
+  ConfigOutput,
+  EnterWorktreeOutput,
   EditOutput,
-  TextFileOutput,
-  ImageFileOutput,
-  PDFFileOutput,
-  NotebookFileOutput,
+  ExitPlanModeOutput,
   ReadOutput,
+  WriteOutput,
   GlobOutput,
   GrepOutput,
-  GrepContentOutput,
-  GrepFilesOutput,
-  GrepCountOutput,
   WebFetchOutput,
   WebSearchOutput,
-  WriteOutput,
   NotebookEditOutput,
   TodoWriteOutput,
-  ExitPlanModeOutput,
-  KillShellOutput,
+  TaskStopOutput,
   ListMcpResourcesOutput,
   ReadMcpResourceOutput,
   ToolOutput,

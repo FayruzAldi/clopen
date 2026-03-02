@@ -22,14 +22,10 @@ import type {
 	GrepInput,
 	WebFetchInput,
 	WebSearchInput,
-	AgentInput,
-	NotebookEditInput,
-	KillShellInput,
+	AskUserQuestionInput,
 	ListMcpResourcesInput,
 	ReadMcpResourceInput,
-	TaskOutputInput,
 	TodoWriteInput,
-	ExitPlanModeInput,
 } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
 
 // ============================================================
@@ -67,13 +63,17 @@ export function getToolInput(toolPart: ToolPart): OCToolInput {
 	return input;
 }
 
-/** All Claude Code tool input types */
-type ClaudeToolInput =
+/**
+ * Normalized tool input types.
+ * Only includes tools that exist in OpenCode SDK:
+ * bash, read, edit, write, glob, grep, webfetch, websearch,
+ * question, todowrite, todoread, patch, list, skill, lsp
+ */
+type NormalizedToolInput =
 	| BashInput | FileReadInput | FileEditInput | FileWriteInput
 	| GlobInput | GrepInput | WebFetchInput | WebSearchInput
-	| AgentInput | NotebookEditInput | KillShellInput
-	| ListMcpResourcesInput | ReadMcpResourceInput
-	| TaskOutputInput | TodoWriteInput | ExitPlanModeInput;
+	| AskUserQuestionInput | TodoWriteInput
+	| ListMcpResourcesInput | ReadMcpResourceInput;
 
 /** Text content block */
 interface TextContentBlock {
@@ -86,7 +86,7 @@ interface ToolUseContentBlock {
 	type: 'tool_use';
 	id: string;
 	name: string;
-	input: ClaudeToolInput;
+	input: NormalizedToolInput;
 	$result?: ToolResult;
 }
 
@@ -97,34 +97,42 @@ type ContentBlock = TextContentBlock | ToolUseContentBlock;
 // ============================================================
 
 /**
- * OpenCode tool names → Claude Code tool names
+ * OpenCode tool names → Claude Code tool names (for UI rendering)
  *
- * OpenCode tool names (from Go source):
- *   bash, view, edit, write, glob, grep, fetch, ls, patch, diagnostics, sourcegraph
+ * Only maps tools that exist in OpenCode SDK:
+ * bash, read, edit, write, glob, grep, webfetch, websearch,
+ * question, todowrite, todoread, patch, list, skill, lsp
+ *
+ * @see https://opencode.ai/docs/tools
  */
 const TOOL_NAME_MAP: Record<string, string> = {
+	// File operations
 	'bash': 'Bash',
 	'view': 'Read',
 	'read': 'Read',
 	'write': 'Write',
 	'edit': 'Edit',
+	'patch': 'Patch',
+	// Search & discovery
 	'glob': 'Glob',
 	'grep': 'Grep',
+	'list': 'List',
+	// Web
 	'fetch': 'WebFetch',
 	'web_fetch': 'WebFetch',
 	'webfetch': 'WebFetch',
 	'web_search': 'WebSearch',
 	'websearch': 'WebSearch',
-	'task': 'Task',
+	// Task management
 	'todo_write': 'TodoWrite',
 	'todowrite': 'TodoWrite',
 	'todoread': 'TodoWrite',
-	'notebook_edit': 'NotebookEdit',
-	'notebookedit': 'NotebookEdit',
-	'exit_plan_mode': 'ExitPlanMode',
-	'exitplanmode': 'ExitPlanMode',
-	'kill_shell': 'KillShell',
-	'killshell': 'KillShell',
+	// User interaction
+	'question': 'AskUserQuestion',
+	// Code intelligence & utilities
+	'skill': 'Skill',
+	'lsp': 'Lsp',
+	// MCP (custom servers)
 	'list_mcp_resources': 'ListMcpResources',
 	'read_mcp_resource': 'ReadMcpResource',
 };
@@ -282,40 +290,9 @@ function normalizeWebSearchInput(raw: OCToolInput): WebSearchInput {
 	return result;
 }
 
-function normalizeAgentInput(raw: OCToolInput): AgentInput {
-	const result: AgentInput = {
-		description: str(raw, 'description', 'description'),
-		prompt: str(raw, 'prompt', 'prompt'),
-		subagent_type: str(raw, 'subagent_type', 'subagentType'),
-	};
-	const model = optStr(raw, 'model', 'model') as AgentInput['model'];
-	if (model != null) result.model = model;
-	const resume = optStr(raw, 'resume', 'resume');
-	if (resume != null) result.resume = resume;
-	const runInBackground = optBool(raw, 'run_in_background', 'runInBackground');
-	if (runInBackground != null) result.run_in_background = runInBackground;
-	const maxTurns = optNum(raw, 'max_turns', 'maxTurns');
-	if (maxTurns != null) result.max_turns = maxTurns;
-	return result;
-}
-
-function normalizeNotebookEditInput(raw: OCToolInput): NotebookEditInput {
-	const result: NotebookEditInput = {
-		notebook_path: str(raw, 'notebook_path', 'notebookPath'),
-		new_source: str(raw, 'new_source', 'newSource'),
-	};
-	const cellId = optStr(raw, 'cell_id', 'cellId');
-	if (cellId != null) result.cell_id = cellId;
-	const cellType = optStr(raw, 'cell_type', 'cellType') as NotebookEditInput['cell_type'];
-	if (cellType != null) result.cell_type = cellType;
-	const editMode = optStr(raw, 'edit_mode', 'editMode') as NotebookEditInput['edit_mode'];
-	if (editMode != null) result.edit_mode = editMode;
-	return result;
-}
-
-function normalizeKillShellInput(raw: OCToolInput): KillShellInput {
+function normalizeAskUserQuestionInput(raw: OCToolInput): AskUserQuestionInput {
 	return {
-		shell_id: str(raw, 'shell_id', 'shellId'),
+		questions: (raw.questions ?? []) as AskUserQuestionInput['questions'],
 	};
 }
 
@@ -333,25 +310,10 @@ function normalizeReadMcpResourceInput(raw: OCToolInput): ReadMcpResourceInput {
 	};
 }
 
-function normalizeTaskOutputInput(raw: OCToolInput): TaskOutputInput {
-	return {
-		task_id: str(raw, 'task_id', 'taskId'),
-		block: (raw.block ?? true) as boolean,
-		timeout: (raw.timeout ?? 30000) as number,
-	};
-}
-
 function normalizeTodoWriteInput(raw: OCToolInput): TodoWriteInput {
 	return {
 		todos: (raw.todos ?? []) as TodoWriteInput['todos'],
 	};
-}
-
-function normalizeExitPlanModeInput(raw: OCToolInput): ExitPlanModeInput {
-	const result: ExitPlanModeInput = {};
-	const allowedPrompts = raw.allowedPrompts ?? raw.allowed_prompts;
-	if (allowedPrompts != null) result.allowedPrompts = allowedPrompts as ExitPlanModeInput['allowedPrompts'];
-	return result;
 }
 
 // ============================================================
@@ -362,10 +324,10 @@ function normalizeExitPlanModeInput(raw: OCToolInput): ExitPlanModeInput {
  * Normalize OpenCode tool input → Claude Code tool input format.
  * Handles camelCase → snake_case conversion and field name differences.
  */
-function normalizeToolInput(claudeToolName: string, raw: OCToolInput): ClaudeToolInput {
+function normalizeToolInput(claudeToolName: string, raw: OCToolInput): NormalizedToolInput {
 	// Custom MCP tools (mcp__*) — pass input through as-is
 	if (claudeToolName.startsWith('mcp__')) {
-		return raw as ClaudeToolInput;
+		return raw as NormalizedToolInput;
 	}
 
 	switch (claudeToolName) {
@@ -377,21 +339,17 @@ function normalizeToolInput(claudeToolName: string, raw: OCToolInput): ClaudeToo
 		case 'Grep': return normalizeGrepInput(raw);
 		case 'WebFetch': return normalizeWebFetchInput(raw);
 		case 'WebSearch': return normalizeWebSearchInput(raw);
-		case 'Task': return normalizeAgentInput(raw);
-		case 'NotebookEdit': return normalizeNotebookEditInput(raw);
-		case 'KillShell': return normalizeKillShellInput(raw);
+		case 'AskUserQuestion': return normalizeAskUserQuestionInput(raw);
 		case 'ListMcpResources': return normalizeListMcpResourcesInput(raw);
 		case 'ReadMcpResource': return normalizeReadMcpResourceInput(raw);
-		case 'TaskOutput': return normalizeTaskOutputInput(raw);
 		case 'TodoWrite': return normalizeTodoWriteInput(raw);
-		case 'ExitPlanMode': return normalizeExitPlanModeInput(raw);
 		default: {
 			// Unknown tool: generic camelCase → snake_case key normalization
 			const normalized: Record<string, string | number | boolean> = {};
 			for (const [key, value] of Object.entries(raw)) {
 				normalized[camelToSnake(key)] = value as string | number | boolean;
 			}
-			return normalized as ClaudeToolInput;
+			return normalized as NormalizedToolInput;
 		}
 	}
 }

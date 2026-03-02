@@ -36,7 +36,7 @@
 		isLastUserMessage?: boolean;
 		roleConfig: { gradient: string; icon: IconName; name: string };
 		roleCategory: 'user' | 'assistant' | 'agent' | string;
-		agentStatus: 'processing' | 'success' | 'error' | null;
+		agentStatus: 'processing' | 'waiting' | 'success' | 'error' | null;
 		senderName: string | null;
 		hasTokenUsageData: any;
 		formatTime: (timestamp?: string) => string;

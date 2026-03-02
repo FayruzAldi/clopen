@@ -55,4 +55,10 @@ export interface AIEngine {
 
 	/** Return the list of models this engine supports */
 	getAvailableModels(): Promise<EngineModel[]>;
+
+	/**
+	 * Resolve a pending AskUserQuestion by providing the user's answers.
+	 * Unblocks the canUseTool callback so the SDK can continue.
+	 */
+	resolveUserAnswer?(toolUseId: string, answers: Record<string, string>): boolean;
 }

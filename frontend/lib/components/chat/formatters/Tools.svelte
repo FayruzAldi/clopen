@@ -3,10 +3,11 @@
 	import type { ToolInput } from '$shared/types/messaging';
 	import {
 		BashTool, BashOutputTool, EditTool, ExitPlanModeTool,
-		GlobTool, GrepTool, KillShellTool, ListMcpResourcesTool,
+		GlobTool, GrepTool, TaskStopTool, ListMcpResourcesTool,
 		NotebookEditTool,
 		ReadTool, ReadMcpResourceTool, TaskTool, TodoWriteTool,
-		WebFetchTool, WebSearchTool, WriteTool, CustomMcpTool
+		WebFetchTool, WebSearchTool, WriteTool, CustomMcpTool,
+		AskUserQuestionTool
 	} from '../tools';
 
 	const { toolInput }: { toolInput: ToolInput } = $props();
@@ -38,8 +39,8 @@
 	<GlobTool {toolInput} />
 {:else if toolInput.name === 'Grep'}
 	<GrepTool {toolInput} />
-{:else if toolInput.name === 'KillShell'}
-	<KillShellTool {toolInput} />
+{:else if toolInput.name === 'TaskStop'}
+	<TaskStopTool {toolInput} />
 {:else if toolInput.name === 'ListMcpResources'}
 	<ListMcpResourcesTool {toolInput} />
 {:else if toolInput.name === 'NotebookEdit'}
@@ -56,8 +57,10 @@
 	<WebSearchTool {toolInput} />
 {:else if toolInput.name === 'Write'}
 	<WriteTool {toolInput} />
+{:else if toolInput.name === 'AskUserQuestion'}
+	<AskUserQuestionTool {toolInput} />
 {:else}
-	<!-- Generic fallback for unknown tools -->
+	<!-- Generic fallback for unknown tools (Config, EnterWorktree, etc.) -->
 	<div class="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-4 mb-4">
 		<div class="flex items-center gap-2 mb-2">
 			<Icon name="lucide:wrench" class="text-green-600 dark:text-green-400 w-5 h-5" />

@@ -12,6 +12,7 @@
 	import Dialog from '$frontend/lib/components/common/Dialog.svelte';
 	import { presenceState } from '$frontend/lib/stores/core/presence.svelte';
 	import { userStore } from '$frontend/lib/stores/features/user.svelte';
+	import { getSessionProcessState } from '$frontend/lib/stores/core/app.svelte';
 	import { debug } from '$shared/utils/logger';
 
 	interface Props {
@@ -473,7 +474,7 @@
 								<Icon name="lucide:message-square" class="text-violet-600 dark:text-violet-400 w-4 h-4" />
 								{#if streaming}
 									<span
-										class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 bg-emerald-500"
+										class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 {getSessionProcessState(session.id).isWaitingInput ? 'bg-amber-500' : 'bg-emerald-500'}"
 									></span>
 								{:else}
 									<span
@@ -511,10 +512,17 @@
 									{/if}
 								</div>
 								{#if streaming}
-								<p class="text-xs text-violet-500 dark:text-violet-400 mt-0.5 flex items-center gap-1.5">
-									<span class="inline-block w-3 h-3 border-2 border-violet-400 border-t-transparent rounded-full animate-spin shrink-0"></span>
-									Processing...
-								</p>
+								{#if getSessionProcessState(session.id).isWaitingInput}
+									<p class="text-xs text-amber-500 dark:text-amber-400 mt-0.5 flex items-center gap-1.5">
+										<Icon name="lucide:message-circle-question-mark" class="w-3 h-3 shrink-0" />
+										Waiting for input...
+									</p>
+								{:else}
+									<p class="text-xs text-violet-500 dark:text-violet-400 mt-0.5 flex items-center gap-1.5">
+										<span class="inline-block w-3 h-3 border-2 border-violet-400 border-t-transparent rounded-full animate-spin shrink-0"></span>
+										Processing...
+									</p>
+								{/if}
 							{:else}
 								<p class="text-xs text-slate-400 dark:text-slate-500 truncate mt-0.5">
 									{getSessionSummary(session.id)}

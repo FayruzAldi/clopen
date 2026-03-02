@@ -1,7 +1,13 @@
 <script lang="ts">
-	import type { BashToolInput, BashOutputToolOutput } from '$shared/types/messaging';
+	import type { BashToolInput } from '$shared/types/messaging';
 	import { TerminalCommand } from './components';
 	import CodeBlock from './components/CodeBlock.svelte';
+
+	/** Parsed background bash output (from XML-formatted BashOutput tool result) */
+	interface ParsedBashOutput {
+		status: 'running' | 'completed' | 'failed';
+		output: string;
+	}
 
 	const { toolInput }: { toolInput: BashToolInput } = $props();
 
@@ -10,13 +16,12 @@
 	const timeout = toolInput.input.timeout;
 	const isBackground = toolInput.input.run_in_background;
 
-	function parseBashOutputToolOutput(content: string): BashOutputToolOutput {
+	function parseBashOutputToolOutput(content: string): ParsedBashOutput {
 		const statusMatch = content.match(/<status>(.*?)<\/status>/);
 		const stdoutMatch = content.match(/<stdout>(.*?)<\/stdout>/s);
-		const timestampMatch = content.match(/<timestamp>(.*?)<\/timestamp>/);
 
 		return {
-			status: statusMatch ? statusMatch[1] as BashOutputToolOutput['status'] : 'completed',
+			status: statusMatch ? statusMatch[1] as ParsedBashOutput['status'] : 'completed',
 			output: stdoutMatch ? stdoutMatch[1].trim() : ""
 		};
 	}

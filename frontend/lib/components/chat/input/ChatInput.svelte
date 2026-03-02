@@ -146,6 +146,9 @@
 		if (chatBlockedReason === 'no-model') {
 			return 'No model selected. Please select a model to start chatting.';
 		}
+		if (appState.isWaitingInput) {
+			return 'Answer the question above to continue...';
+		}
 		return placeholderAnimation.placeholderText;
 	});
 
@@ -277,6 +280,9 @@
 					sessionState.currentSession.id,
 					streamState.processId
 				);
+
+				// Detect if an interactive tool (e.g. AskUserQuestion) is pending in existing messages
+				chatService.detectPendingInteractiveTools();
 
 				debug.log('chat', 'Caught up with active stream:', {
 					processId: streamState.processId,

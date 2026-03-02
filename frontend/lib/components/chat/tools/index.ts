@@ -5,7 +5,7 @@ export { default as EditTool } from './EditTool.svelte';
 export { default as ExitPlanModeTool } from './ExitPlanModeTool.svelte';
 export { default as GlobTool } from './GlobTool.svelte';
 export { default as GrepTool } from './GrepTool.svelte';
-export { default as KillShellTool } from './KillShellTool.svelte';
+export { default as TaskStopTool } from './TaskStopTool.svelte';
 export { default as ListMcpResourcesTool } from './ListMcpResourcesTool.svelte';
 export { default as NotebookEditTool } from './NotebookEditTool.svelte';
 export { default as ReadTool } from './ReadTool.svelte';
@@ -15,6 +15,7 @@ export { default as TodoWriteTool } from './TodoWriteTool.svelte';
 export { default as WebFetchTool } from './WebFetchTool.svelte';
 export { default as WebSearchTool } from './WebSearchTool.svelte';
 export { default as WriteTool } from './WriteTool.svelte';
+export { default as AskUserQuestionTool } from './AskUserQuestionTool.svelte';
 
 // Custom MCP Tools
 export { default as CustomMcpTool } from './CustomMcpTool.svelte';

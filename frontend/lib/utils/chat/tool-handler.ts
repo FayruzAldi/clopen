@@ -8,13 +8,14 @@ import type {
   BackgroundBashData
 } from './message-grouper';
 
-// Extended ToolUse with embedded result
+// Extended ToolUse with embedded result and metadata
 export interface ToolUseWithResult {
   type: 'tool_use';
   id: string;
   name: string;
   input: any;
   $result?: any;
+  metadata?: Record<string, unknown>;
 }
 
 // Process a tool message with embedded results
@@ -27,11 +28,19 @@ export function processToolMessage(
   const content = messageAny.message?.content ?
     (Array.isArray(messageAny.message.content) ? messageAny.message.content : [messageAny.message.content]) : [];
 
+  // Check if parent message is marked as interrupted
+  const isInterrupted = !!(messageAny.metadata?.interrupted);
+
   // Create modified content with embedded tool_result in tool_use objects
   const modifiedContent = content
     .map((item: any): any => {
       if (typeof item === 'object' && item && 'type' in item && item.type === 'tool_use') {
-        return processToolUse(item, toolUseMap, backgroundBashMap);
+        const processed = processToolUse(item, toolUseMap, backgroundBashMap);
+        // Propagate message-level interrupted flag to ALL tool_use blocks
+        if (processed && isInterrupted) {
+          return { ...processed, metadata: { ...processed.metadata, interrupted: true } };
+        }
+        return processed;
       }
       return item;
     })

@@ -42,7 +42,7 @@ export const TOOLS_WITH_RESULTS: ToolInput['name'][] = [
   'ExitPlanMode',
   'Glob',
   'Grep',
-  'KillShell',
+  'TaskStop',
   'ListMcpResources',
   'NotebookEdit',
   'ReadMcpResource',
@@ -51,7 +51,10 @@ export const TOOLS_WITH_RESULTS: ToolInput['name'][] = [
   'TodoWrite',
   'WebFetch',
   'WebSearch',
-  'Write'
+  'Write',
+  'AskUserQuestion',
+  'Config',
+  'EnterWorktree'
 ];
 
 // Tools that should be hidden from display

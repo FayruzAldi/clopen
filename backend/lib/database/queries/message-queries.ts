@@ -438,6 +438,53 @@ export const messageQueries = {
 	},
 
 	/**
+	 * Mark messages with unanswered tool_use blocks as interrupted.
+	 * Called when stream ends (complete/error/cancel) to persist the interrupted state.
+	 * Adds metadata.interrupted = true to the sdk_message JSON at the message level.
+	 */
+	markInterruptedMessages(sessionId: string): void {
+		const db = getDatabase();
+
+		// Get all visible messages for the session
+		const messages = db.prepare(`
+			SELECT id, sdk_message FROM messages
+			WHERE session_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
+			ORDER BY timestamp ASC
+		`).all(sessionId) as { id: string; sdk_message: string }[];
+
+		// Collect all tool_use_ids that have a matching tool_result
+		const answeredToolIds = new Set<string>();
+		for (const msg of messages) {
+			const sdk = JSON.parse(msg.sdk_message);
+			if (sdk.type !== 'user' || !sdk.message?.content) continue;
+			const content = Array.isArray(sdk.message.content) ? sdk.message.content : [];
+			for (const item of content) {
+				if (item.type === 'tool_result' && item.tool_use_id) {
+					answeredToolIds.add(item.tool_use_id);
+				}
+			}
+		}
+
+		// Find assistant messages with unanswered tool_use blocks and mark them
+		const updateStmt = db.prepare(`UPDATE messages SET sdk_message = ? WHERE id = ?`);
+
+		for (const msg of messages) {
+			const sdk = JSON.parse(msg.sdk_message);
+			if (sdk.type !== 'assistant' || !sdk.message?.content) continue;
+			const content = Array.isArray(sdk.message.content) ? sdk.message.content : [];
+
+			const hasUnansweredTool = content.some(
+				(item: any) => item.type === 'tool_use' && item.id && !answeredToolIds.has(item.id)
+			);
+
+			if (hasUnansweredTool && !sdk.metadata?.interrupted) {
+				sdk.metadata = { ...sdk.metadata, interrupted: true };
+				updateStmt.run(JSON.stringify(sdk), msg.id);
+			}
+		}
+	},
+
+	/**
 	 * Group orphaned messages by their branch root
 	 * Returns map of branchRootId -> [orphaned messages]
 	 *

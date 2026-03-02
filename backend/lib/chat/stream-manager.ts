@@ -837,6 +837,38 @@ class StreamManager extends EventEmitter {
 	/**
 	 * Cancel an active stream
 	 */
+	/**
+	 * Resolve a pending AskUserQuestion for an active stream.
+	 * Unblocks the engine's canUseTool callback so the SDK can continue.
+	 */
+	resolveUserAnswer(chatSessionId: string, projectId: string | undefined, toolUseId: string, answers: Record<string, string>): boolean {
+		// Find the active stream for this session
+		const sessionKey = this.getSessionKey(projectId, chatSessionId);
+		const streamId = this.sessionStreams.get(sessionKey);
+		if (!streamId) {
+			debug.warn('chat', 'resolveUserAnswer: No stream found for session');
+			return false;
+		}
+
+		const streamState = this.activeStreams.get(streamId);
+		if (!streamState || streamState.status !== 'active') {
+			debug.warn('chat', 'resolveUserAnswer: Stream not active');
+			return false;
+		}
+
+		// Get the engine for this project
+		const pid = streamState.projectId || 'default';
+		const engine = getProjectEngine(pid, streamState.engine);
+
+		if (!engine.resolveUserAnswer) {
+			debug.warn('chat', 'resolveUserAnswer: Engine does not support resolveUserAnswer');
+			return false;
+		}
+
+		debug.log('chat', 'Resolving AskUserQuestion answer:', { toolUseId, answers });
+		return engine.resolveUserAnswer(toolUseId, answers);
+	}
+
 	async cancelStream(streamId: string): Promise<boolean> {
 		const streamState = this.activeStreams.get(streamId);
 		if (!streamState || streamState.status !== 'active') {

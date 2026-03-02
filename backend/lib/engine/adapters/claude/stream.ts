@@ -7,7 +7,7 @@
 
 
 import { query, type SDKMessage, type EngineSDKMessage, type Options, type Query, type SDKUserMessage } from '$shared/types/messaging';
-import type { PermissionMode } from "@anthropic-ai/claude-agent-sdk";
+import type { PermissionMode, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { normalizePath } from './path-utils';
 import { setupEnvironmentOnce, getEngineEnv } from './environment';
 import { handleStreamError } from './error-handler';
@@ -17,6 +17,12 @@ import type { EngineModel } from '$shared/types/engine';
 import { CLAUDE_CODE_MODELS } from '$shared/constants/engines';
 
 import { debug } from '$shared/utils/logger';
+
+/** Pending AskUserQuestion resolver — stored while SDK is blocked waiting for user input */
+interface PendingUserAnswer {
+  resolve: (result: PermissionResult) => void;
+  input: Record<string, unknown>;
+}
 
 /** Type guard for AsyncIterable */
 function isAsyncIterable<T>(value: unknown): value is AsyncIterable<T> {
@@ -28,6 +34,7 @@ export class ClaudeCodeEngine implements AIEngine {
   private _isInitialized = false;
   private activeController: AbortController | null = null;
   private activeQuery: Query | null = null;
+  private pendingUserAnswers = new Map<string, PendingUserAnswer>();
 
   get isInitialized(): boolean {
     return this._isInitialized;
@@ -49,6 +56,7 @@ export class ClaudeCodeEngine implements AIEngine {
 
   async dispose(): Promise<void> {
     await this.cancel();
+    this.pendingUserAnswers.clear();
     this._isInitialized = false;
   }
 
@@ -99,6 +107,35 @@ export class ClaudeCodeEngine implements AIEngine {
         systemPrompt: { type: "preset", preset: "claude_code" },
         settingSources: ["user", "project", "local"],
         forkSession: true,
+        // Custom permission handler: blocks on AskUserQuestion until user answers,
+        // auto-allows everything else. Works alongside bypassPermissions.
+        canUseTool: async (_toolName, input, options) => {
+          if (_toolName === 'AskUserQuestion') {
+            debug.log('engine', `AskUserQuestion detected (toolUseID: ${options.toolUseID}), waiting for user input...`);
+            return new Promise<PermissionResult>((resolve) => {
+              // Handle abort (stream cancelled while waiting)
+              if (options.signal.aborted) {
+                resolve({ behavior: 'deny', message: 'Cancelled' });
+                return;
+              }
+              const onAbort = () => {
+                this.pendingUserAnswers.delete(options.toolUseID);
+                resolve({ behavior: 'deny', message: 'Cancelled' });
+              };
+              options.signal.addEventListener('abort', onAbort, { once: true });
+
+              this.pendingUserAnswers.set(options.toolUseID, {
+                resolve: (result: PermissionResult) => {
+                  options.signal.removeEventListener('abort', onAbort);
+                  resolve(result);
+                },
+                input
+              });
+            });
+          }
+          // Auto-allow all other tools
+          return { behavior: 'allow' as const, updatedInput: input };
+        },
         ...(model && { model }),
         ...(resume && { resume }),
         ...(maxTurns && { maxTurns }),
@@ -155,6 +192,8 @@ export class ClaudeCodeEngine implements AIEngine {
       this.activeController = null;
     }
     this.activeQuery = null;
+    // Reject all pending user answer promises (abort signal handles this, but clean up the map)
+    this.pendingUserAnswers.clear();
   }
 
   /**
@@ -173,5 +212,30 @@ export class ClaudeCodeEngine implements AIEngine {
     if (this.activeQuery && typeof this.activeQuery.setPermissionMode === 'function') {
       await this.activeQuery.setPermissionMode(mode);
     }
+  }
+
+  /**
+   * Resolve a pending AskUserQuestion by providing the user's answers.
+   * This unblocks the canUseTool callback, allowing the SDK to continue.
+   */
+  resolveUserAnswer(toolUseId: string, answers: Record<string, string>): boolean {
+    const pending = this.pendingUserAnswers.get(toolUseId);
+    if (!pending) {
+      debug.warn('engine', 'resolveUserAnswer: No pending question for toolUseId:', toolUseId);
+      return false;
+    }
+
+    debug.log('engine', `Resolving AskUserQuestion (toolUseID: ${toolUseId})`);
+
+    pending.resolve({
+      behavior: 'allow',
+      updatedInput: {
+        ...pending.input,
+        answers
+      }
+    });
+
+    this.pendingUserAnswers.delete(toolUseId);
+    return true;
   }
 }

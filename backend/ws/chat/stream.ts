@@ -13,7 +13,7 @@ import { streamManager, type StreamEvent } from '../../lib/chat/stream-manager';
 import { debug } from '$shared/utils/logger';
 import { ws } from '$backend/lib/utils/ws';
 import { broadcastPresence } from '../projects/status';
-import { sessionQueries } from '../../lib/database/queries';
+import { sessionQueries, messageQueries } from '../../lib/database/queries';
 
 // ============================================================================
 // Global stream lifecycle handler (module-level, not per-connection)
@@ -27,6 +27,15 @@ streamManager.on('stream:lifecycle', (event: { status: string; streamId: string;
 	if (!projectId) return;
 
 	debug.log('chat', `Stream lifecycle: ${status} for project ${projectId} session ${chatSessionId}`);
+
+	// Mark any tool_use blocks that never got a tool_result as interrupted (persisted to DB)
+	if (chatSessionId) {
+		try {
+			messageQueries.markInterruptedMessages(chatSessionId);
+		} catch (err) {
+			debug.error('chat', 'Failed to mark interrupted messages:', err);
+		}
+	}
 
 	// Notify all project members (cross-project notification for sound + push)
 	ws.emit.projectMembers(projectId, 'chat:stream-finished', {
@@ -357,6 +366,39 @@ export const streamHandler = createRouter()
 
 		} catch (error) {
 			debug.error('chat', 'Error reconnecting to stream:', error);
+		}
+	})
+
+	// Handle AskUserQuestion answer from user
+	.on('chat:ask-user-answer', {
+		data: t.Object({
+			chatSessionId: t.String(),
+			toolUseId: t.String(),
+			answers: t.Record(t.String(), t.String())
+		})
+	}, async ({ data, conn }) => {
+		const projectId = ws.getProjectId(conn);
+
+		try {
+			debug.log('chat', 'WS chat:ask-user-answer received:', {
+				chatSessionId: data.chatSessionId,
+				toolUseId: data.toolUseId,
+				answers: data.answers
+			});
+
+			const success = streamManager.resolveUserAnswer(
+				data.chatSessionId,
+				projectId,
+				data.toolUseId,
+				data.answers
+			);
+
+			if (!success) {
+				debug.warn('chat', 'Failed to resolve user answer for stream');
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+			debug.error('chat', 'WS chat:ask-user-answer error:', errorMessage);
 		}
 	})
 

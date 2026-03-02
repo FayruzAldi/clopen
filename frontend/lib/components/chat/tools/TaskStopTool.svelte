@@ -1,16 +1,16 @@
 <script lang="ts">
-	import type { KillShellToolInput } from '$shared/types/messaging';
+	import type { TaskStopToolInput } from '$shared/types/messaging';
 	import { InfoLine } from './components';
 	import TextMessage from '../formatters/TextMessage.svelte';
 
-	const { toolInput }: { toolInput: KillShellToolInput } = $props();
-	
-	const shellId = toolInput.input.shell_id;
+	const { toolInput }: { toolInput: TaskStopToolInput } = $props();
+
+	const taskId = toolInput.input.task_id || toolInput.input.shell_id || 'unknown';
 </script>
 
 <div class="bg-white dark:bg-slate-800 rounded-md border border-slate-200/60 dark:border-slate-700/60 p-3">
 	<div class="flex gap-3">
-		<InfoLine icon="lucide:circle-x" text="Terminating shell process: {shellId}" />
+		<InfoLine icon="lucide:circle-x" text="Stopping task: {taskId}" />
 	</div>
 </div>
 

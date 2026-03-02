@@ -164,7 +164,7 @@
 	// Detect agent processing status
 	// When stream is no longer active (not loading) and tools don't have results,
 	// mark them as failed (cancelled/interrupted) instead of perpetually "processing"
-	const agentStatus = $derived.by((): 'processing' | 'success' | 'error' | null => {
+	const agentStatus = $derived.by((): 'processing' | 'waiting' | 'success' | 'error' | null => {
 		if (roleCategory !== 'agent') return null;
 
 		if (message.type === 'assistant' && 'message' in message && Array.isArray(message.message.content)) {
@@ -176,6 +176,8 @@
 			const allHaveResults = toolUses.every((tool: any) => '$result' in tool && tool.$result);
 
 			if (!allHaveResults) {
+				// If stream is active and waiting for user input → show as waiting
+				if (appState.isWaitingInput) return 'waiting';
 				// If stream is still active, tools are processing
 				// If stream ended (not loading), tools were interrupted/cancelled → show as error
 				return appState.isLoading ? 'processing' : 'error';
