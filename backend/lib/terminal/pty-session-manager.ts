@@ -61,7 +61,7 @@ class PtySessionManager {
 
 		if (isWindows) {
 			// Windows: Use PowerShell in interactive mode
-			shell = 'powershell';
+			shell = 'powershell.exe';
 			shellArgs = ['-NoLogo']; // Interactive mode, no -Command
 		} else {
 			// Unix: Use user's default shell or bash
