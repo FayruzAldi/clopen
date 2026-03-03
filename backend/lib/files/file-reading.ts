@@ -7,9 +7,9 @@ import { debug } from '$shared/utils/logger';
 async function readdir(path: string): Promise<string[]> {
 	let proc;
 	if (process.platform === 'win32') {
-		proc = Bun.spawn(['cmd', '/c', 'dir', '/b', path], { stdout: 'pipe', stderr: 'ignore' });
+		proc = Bun.spawn(['cmd', '/c', 'dir', '/b', '/a', path], { stdout: 'pipe', stderr: 'ignore' });
 	} else {
-		proc = Bun.spawn(['ls', '-1', path], { stdout: 'pipe', stderr: 'ignore' });
+		proc = Bun.spawn(['ls', '-1A', path], { stdout: 'pipe', stderr: 'ignore' });
 	}
 	const result = await new Response(proc.stdout).text();
 	// Split and clean up, removing \r characters for Windows compatibility
