@@ -353,7 +353,6 @@
 							{/if}
 						</div>
 						<div class="flex-1 min-w-0">
-							<!-- svelte-ignore a11y_autofocus -->
 							<input
 								type="text"
 								placeholder="Other (type your answer)..."
