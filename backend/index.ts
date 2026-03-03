@@ -81,7 +81,10 @@ if (!isDevelopment) {
 			if (filePath.startsWith(distDir)) {
 				try {
 					if (statSync(filePath).isFile()) {
-						return new Response(Bun.file(filePath));
+						const file = Bun.file(filePath);
+						return new Response(file, {
+							headers: { 'Content-Type': file.type || 'application/octet-stream' }
+						});
 					}
 				} catch {}
 			}
