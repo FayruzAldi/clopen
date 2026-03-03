@@ -294,6 +294,34 @@ export interface EnterWorktreeToolInput {
   metadata?: ToolMetadata;
 }
 
+// Sub-agent activity item for Agent tool display
+export interface SubAgentActivity {
+  type: 'tool_use' | 'text';
+  toolName?: string;
+  toolInput?: any;
+  toolResult?: any;
+  text?: string;
+}
+
+export interface AgentToolInput {
+  type: 'tool_use';
+  id: string;
+  name: 'Agent';
+  input: AgentInput;
+  $result?: ToolResult;
+  $subMessages?: SubAgentActivity[];
+  metadata?: ToolMetadata;
+}
+
+export interface EnterPlanModeToolInput {
+  type: 'tool_use';
+  id: string;
+  name: 'EnterPlanMode';
+  input: Record<string, unknown>;
+  $result?: ToolResult;
+  metadata?: ToolMetadata;
+}
+
 // ============================================================
 // Union of All Tool Input Types
 // ============================================================
@@ -317,4 +345,6 @@ export type ToolInput =
   | WriteToolInput
   | AskUserQuestionToolInput
   | ConfigToolInput
-  | EnterWorktreeToolInput;
+  | EnterWorktreeToolInput
+  | AgentToolInput
+  | EnterPlanModeToolInput;

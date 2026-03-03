@@ -2,10 +2,10 @@
 	import Icon from '$frontend/lib/components/common/Icon.svelte';
 	import type { ToolInput } from '$shared/types/messaging';
 	import {
-		BashTool, BashOutputTool, EditTool, ExitPlanModeTool,
+		BashTool, BashOutputTool, EditTool, EnterPlanModeTool, ExitPlanModeTool,
 		GlobTool, GrepTool, TaskStopTool, ListMcpResourcesTool,
 		NotebookEditTool,
-		ReadTool, ReadMcpResourceTool, TaskTool, TodoWriteTool,
+		ReadTool, ReadMcpResourceTool, AgentTool, TaskTool, TodoWriteTool,
 		WebFetchTool, WebSearchTool, WriteTool, CustomMcpTool,
 		AskUserQuestionTool
 	} from '../tools';
@@ -33,6 +33,8 @@
 	<BashOutputTool {toolInput} />
 {:else if toolInput.name === 'Edit'}
 	<EditTool {toolInput} />
+{:else if toolInput.name === 'EnterPlanMode'}
+	<EnterPlanModeTool {toolInput} />
 {:else if toolInput.name === 'ExitPlanMode'}
 	<ExitPlanModeTool {toolInput} />
 {:else if toolInput.name === 'Glob'}
@@ -49,6 +51,8 @@
 	<ReadTool {toolInput} />
 {:else if toolInput.name === 'ReadMcpResource'}
 	<ReadMcpResourceTool {toolInput} />
+{:else if toolInput.name === 'Agent'}
+	<AgentTool {toolInput} />
 {:else if toolInput.name === 'Task'}
 	<TaskTool {toolInput} />
 {:else if toolInput.name === 'WebFetch'}

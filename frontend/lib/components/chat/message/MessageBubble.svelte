@@ -74,7 +74,7 @@
 
 		<!-- Message Content -->
 		<div class="p-3 md:p-4">
-			<div class="max-w-none">
+			<div class="max-w-none space-y-4">
 				<!-- Content rendering using MessageFormatter component -->
 				<MessageFormatter {message} />
 			</div>

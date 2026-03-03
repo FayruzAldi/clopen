@@ -127,6 +127,9 @@ export type {
   AskUserQuestionToolInput,
   ConfigToolInput,
   EnterWorktreeToolInput,
+  AgentToolInput,
+  EnterPlanModeToolInput,
+  SubAgentActivity,
   ToolInput,
 
   // Tool output types (from SDK)

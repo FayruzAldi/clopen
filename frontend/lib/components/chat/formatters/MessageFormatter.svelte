@@ -9,6 +9,7 @@
 
 	import type { SDKMessage, SDKPartialAssistantMessage } from '$shared/types/messaging';
 	import type { SDKMessageFormatter } from '$shared/types/database/schema';
+	import { getCompactSummary } from '$frontend/lib/utils/chat/message-grouper';
 
 	const { message }: { message: SDKMessageFormatter } = $props();
 
@@ -47,6 +48,14 @@
 				type: 'text',
 				content: `Context was compacted (${trigger}). Previous messages have been summarized to free up context space.`
 			});
+			// Include synthetic user content (continuation summary) via side-channel lookup
+			const summary = getCompactSummary(message);
+			if (summary) {
+				elements.push({
+					type: 'text',
+					content: summary
+				});
+			}
 			return elements;
 		}
 

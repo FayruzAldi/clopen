@@ -2,7 +2,9 @@ import type { SDKMessageFormatter } from '$shared/types/database/schema';
 import {
   shouldFilterMessage,
   extractToolUses,
-  extractToolResults
+  extractToolResults,
+  isCompactBoundaryMessage,
+  isSyntheticUserMessage
 } from './message-processor';
 import { processToolMessage } from './tool-handler';
 
@@ -21,13 +23,50 @@ export interface BackgroundBashData {
 // Processed message type
 export type ProcessedMessage = SDKMessageFormatter;
 
+// Module-level map for compact summary lookup (rebuilt each groupMessages call)
+let _compactSummaryMap = new WeakMap<SDKMessageFormatter, string>();
+
+// Lookup compact summary for a given compact_boundary message
+export function getCompactSummary(message: SDKMessageFormatter): string | undefined {
+  return _compactSummaryMap.get(message);
+}
+
+// Extract text content from a user message
+function extractUserTextContent(message: SDKMessageFormatter): string {
+  if (!('message' in message) || !message.message?.content) return '';
+  const content = message.message.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((item: any) => typeof item === 'object' && item?.type === 'text')
+      .map((item: any) => item.text)
+      .join('\n');
+  }
+  return '';
+}
+
+// Get parent_tool_use_id from any message type
+function getParentToolUseId(message: SDKMessageFormatter): string | null {
+  if ('parent_tool_use_id' in message) {
+    return (message as any).parent_tool_use_id ?? null;
+  }
+  return null;
+}
+
 // Group tool_use and tool_result messages together
 export function groupMessages(messages: SDKMessageFormatter[]): {
   groups: ProcessedMessage[],
-  toolUseMap: Map<string, ToolGroup>
+  toolUseMap: Map<string, ToolGroup>,
+  subAgentMap: Map<string, SDKMessageFormatter[]>
 } {
   const groups: ProcessedMessage[] = [];
   const toolUseMap = new Map<string, ToolGroup>();
+  const agentToolUseIds = new Set<string>();
+  const subAgentMap = new Map<string, SDKMessageFormatter[]>();
+  let lastCompactBoundaryIdx = -1;
+
+  // Rebuild compact summary map each call
+  _compactSummaryMap = new WeakMap<SDKMessageFormatter, string>();
 
   messages.forEach(message => {
     // Skip messages that should be filtered
@@ -35,8 +74,30 @@ export function groupMessages(messages: SDKMessageFormatter[]): {
       return;
     }
 
+    // Intercept ALL sub-agent messages (any parent_tool_use_id !== null)
+    // before normal processing — these belong to Agent tool sub-conversations
+    const parentToolId = getParentToolUseId(message);
+    if (parentToolId) {
+      if (agentToolUseIds.has(parentToolId)) {
+        if (!subAgentMap.has(parentToolId)) {
+          subAgentMap.set(parentToolId, []);
+        }
+        subAgentMap.get(parentToolId)!.push(message);
+      }
+      // Don't add any sub-agent message to main groups
+      return;
+    }
+
+    // Handle compact boundary messages — track for synthetic user embedding
+    if (isCompactBoundaryMessage(message)) {
+      lastCompactBoundaryIdx = groups.length;
+      groups.push(message as ProcessedMessage);
+      return;
+    }
+
     // Handle assistant messages with tool_use
     if (message.type === 'assistant' && 'message' in message && message.message?.content) {
+      lastCompactBoundaryIdx = -1;
       const toolUses = extractToolUses(message.message.content);
 
       if (toolUses.length > 0) {
@@ -47,17 +108,35 @@ export function groupMessages(messages: SDKMessageFormatter[]): {
               toolUseMessage: message,
               toolResultMessage: null
             });
+            // Track Agent tool IDs for sub-agent message collection
+            if (toolUse.name === 'Agent') {
+              agentToolUseIds.add(toolUse.id);
+            }
           }
         });
         groups.push(message as ProcessedMessage);
       } else {
         groups.push(message as ProcessedMessage);
       }
+      return;
     }
-    // Handle user messages with tool_result
-    else if (message.type === 'user' && 'message' in message && message.message?.content) {
-      const toolResults = extractToolResults(message.message.content);
 
+    // Handle user messages
+    if (message.type === 'user' && 'message' in message && message.message?.content) {
+      // Synthetic user messages (after compaction): store summary in WeakMap keyed by compact boundary message
+      if (isSyntheticUserMessage(message) && lastCompactBoundaryIdx >= 0) {
+        const compactMsg = groups[lastCompactBoundaryIdx];
+        const summaryText = extractUserTextContent(message);
+        if (summaryText) {
+          _compactSummaryMap.set(compactMsg, summaryText);
+        }
+        lastCompactBoundaryIdx = -1;
+        return;
+      }
+
+      lastCompactBoundaryIdx = -1;
+
+      const toolResults = extractToolResults(message.message.content);
       if (toolResults.length > 0) {
         // Group tool_result with corresponding tool_use
         toolResults.forEach((toolResult: any) => {
@@ -73,20 +152,22 @@ export function groupMessages(messages: SDKMessageFormatter[]): {
         // Regular user message
         groups.push(message as ProcessedMessage);
       }
+      return;
     }
+
     // Include stream_event and other messages
-    else {
-      groups.push(message as ProcessedMessage);
-    }
+    lastCompactBoundaryIdx = -1;
+    groups.push(message as ProcessedMessage);
   });
 
-  return { groups, toolUseMap };
+  return { groups, toolUseMap, subAgentMap };
 }
 
 // Add tool results to messages
 export function embedToolResults(
   groups: ProcessedMessage[],
-  toolUseMap: Map<string, ToolGroup>
+  toolUseMap: Map<string, ToolGroup>,
+  subAgentMap: Map<string, SDKMessageFormatter[]>
 ): ProcessedMessage[] {
   // Track background bash sessions
   const backgroundBashMap = trackBackgroundBashSessions(groups, toolUseMap);
@@ -100,7 +181,8 @@ export function embedToolResults(
         const processedMessage = processToolMessage(
           message,
           toolUseMap,
-          backgroundBashMap
+          backgroundBashMap,
+          subAgentMap
         );
         return processedMessage;
       }

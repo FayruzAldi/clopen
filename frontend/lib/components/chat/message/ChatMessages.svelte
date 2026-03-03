@@ -48,8 +48,8 @@
 
 	// Process messages through grouping and embedding
 	const processedMessages = $derived.by(() => {
-		const { groups, toolUseMap } = groupMessages(sessionState.messages);
-		return embedToolResults(groups, toolUseMap);
+		const { groups, toolUseMap, subAgentMap } = groupMessages(sessionState.messages);
+		return embedToolResults(groups, toolUseMap, subAgentMap);
 	});
 
 	// Filter out messages with empty content arrays

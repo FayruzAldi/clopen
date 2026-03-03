@@ -7,6 +7,8 @@ import type {
   ToolGroup,
   BackgroundBashData
 } from './message-grouper';
+import type { SDKMessageFormatter } from '$shared/types/database/schema';
+import type { SubAgentActivity } from '$shared/types/messaging';
 
 // Extended ToolUse with embedded result and metadata
 export interface ToolUseWithResult {
@@ -15,6 +17,7 @@ export interface ToolUseWithResult {
   name: string;
   input: any;
   $result?: any;
+  $subMessages?: SubAgentActivity[];
   metadata?: Record<string, unknown>;
 }
 
@@ -22,7 +25,8 @@ export interface ToolUseWithResult {
 export function processToolMessage(
   message: ProcessedMessage,
   toolUseMap: Map<string, ToolGroup>,
-  backgroundBashMap: Map<string, BackgroundBashData>
+  backgroundBashMap: Map<string, BackgroundBashData>,
+  subAgentMap: Map<string, SDKMessageFormatter[]>
 ): ProcessedMessage {
   const messageAny = message as any;
   const content = messageAny.message?.content ?
@@ -35,7 +39,7 @@ export function processToolMessage(
   const modifiedContent = content
     .map((item: any): any => {
       if (typeof item === 'object' && item && 'type' in item && item.type === 'tool_use') {
-        const processed = processToolUse(item, toolUseMap, backgroundBashMap);
+        const processed = processToolUse(item, toolUseMap, backgroundBashMap, subAgentMap);
         // Propagate message-level interrupted flag to ALL tool_use blocks
         if (processed && isInterrupted) {
           return { ...processed, metadata: { ...processed.metadata, interrupted: true } };
@@ -60,7 +64,8 @@ export function processToolMessage(
 function processToolUse(
   item: any,
   toolUseMap: Map<string, ToolGroup>,
-  backgroundBashMap: Map<string, BackgroundBashData>
+  backgroundBashMap: Map<string, BackgroundBashData>,
+  subAgentMap: Map<string, SDKMessageFormatter[]>
 ): ToolUseWithResult | null {
   // Hide certain tools completely
   if (shouldHideTool(item.name)) {
@@ -75,12 +80,89 @@ function processToolUse(
     return handleBackgroundBash(item, toolUseMap, backgroundBashMap);
   }
 
+  // Special handling for Agent tool — embed sub-agent activities
+  if (item.name === 'Agent' && item.id && subAgentMap.has(item.id)) {
+    return handleAgentTool(item, toolUseMap, subAgentMap);
+  }
+
   // Regular tool handling
   if (item.id && item.name && shouldEmbedResult(item.name) && toolUseMap.has(item.id)) {
     return handleRegularTool(item, toolUseMap);
   }
 
   return item;
+}
+
+// Handle Agent tool — process sub-agent messages into activities
+function handleAgentTool(
+  item: any,
+  toolUseMap: Map<string, ToolGroup>,
+  subAgentMap: Map<string, SDKMessageFormatter[]>
+): ToolUseWithResult {
+  const subMessages = subAgentMap.get(item.id) || [];
+  const activities = processSubAgentMessages(subMessages);
+
+  // Also embed the $result if available
+  let result: any = undefined;
+  if (item.id && toolUseMap.has(item.id)) {
+    const group = toolUseMap.get(item.id);
+    if (group?.toolResultMessage) {
+      const resultMessage = group.toolResultMessage as any;
+      const resultContent = resultMessage.message ?
+        (Array.isArray(resultMessage.message.content) ? resultMessage.message.content : [resultMessage.message.content]) : [];
+      result = findToolResult(resultContent, item.id);
+    }
+  }
+
+  return {
+    ...item,
+    ...(result ? { $result: result } : {}),
+    ...(activities.length > 0 ? { $subMessages: activities } : {})
+  } as ToolUseWithResult;
+}
+
+// Process sub-agent messages into a flat activity list
+function processSubAgentMessages(messages: SDKMessageFormatter[]): SubAgentActivity[] {
+  const activities: SubAgentActivity[] = [];
+  const toolResultMap = new Map<string, any>();
+
+  // First pass: collect all tool_results from user messages
+  for (const msg of messages) {
+    if (msg.type === 'user' && 'message' in msg && msg.message?.content) {
+      const content = Array.isArray(msg.message.content) ? msg.message.content : [msg.message.content];
+      for (const item of content) {
+        if (typeof item === 'object' && item && item.type === 'tool_result' && item.tool_use_id) {
+          toolResultMap.set(item.tool_use_id, item);
+        }
+      }
+    }
+  }
+
+  // Second pass: build activity list from assistant messages
+  for (const msg of messages) {
+    if (msg.type === 'assistant' && 'message' in msg && msg.message?.content) {
+      const content = Array.isArray(msg.message.content) ? msg.message.content : [msg.message.content];
+      for (const item of content) {
+        if (typeof item === 'object' && item) {
+          if (item.type === 'tool_use') {
+            activities.push({
+              type: 'tool_use',
+              toolName: item.name,
+              toolInput: item.input,
+              toolResult: toolResultMap.get(item.id) || undefined
+            });
+          } else if (item.type === 'text' && item.text?.trim()) {
+            activities.push({
+              type: 'text',
+              text: item.text
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return activities;
 }
 
 // Handle background bash commands
