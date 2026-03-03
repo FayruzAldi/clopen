@@ -438,32 +438,120 @@ class StreamManager extends EventEmitter {
 					continue;
 				}
 
-				// Handle compact boundary messages
+				// Handle compact boundary messages — save to DB and show in chat UI
 				if (message.type === 'system' && message.subtype === 'compact_boundary') {
 					const compactMessage = message as SDKCompactBoundaryMessage;
 					streamState.hasCompactBoundary = true;
+					const compactTimestamp = new Date().toISOString();
+
+					// Save to DB so compact boundary persists across refresh
+					let savedCompactId: string | undefined;
+					let savedCompactParentId: string | null = null;
+					if (chatSessionId) {
+						const saved = await this.saveMessage(
+							message,
+							chatSessionId,
+							compactTimestamp,
+							requestData.senderId,
+							requestData.senderName
+						);
+						savedCompactId = saved?.id;
+						savedCompactParentId = saved?.parent_message_id || null;
+					}
 
 					streamState.messages.push({
 						processId: streamState.processId,
 						message,
-						timestamp: new Date().toISOString(),
+						timestamp: compactTimestamp,
+						message_id: savedCompactId,
+						parent_message_id: savedCompactParentId,
 						compactBoundary: {
 							trigger: compactMessage.compact_metadata.trigger,
 							preTokens: compactMessage.compact_metadata.pre_tokens
 						}
 					});
 
-					this.emitStreamEvent(streamState, 'notification', {
-						notification: {
-							type: 'info',
-							title: 'Conversation Compacted',
-							message: `Conversation history has been compacted (${compactMessage.compact_metadata.trigger} trigger).`,
-							icon: 'lucide:layers'
-						},
-						timestamp: new Date().toISOString()
+					// Emit as chat:message so it shows in the chat UI
+					this.emitStreamEvent(streamState, 'message', {
+						processId: streamState.processId,
+						message,
+						timestamp: compactTimestamp,
+						message_id: savedCompactId,
+						parent_message_id: savedCompactParentId,
+						sender_id: requestData.senderId,
+						sender_name: requestData.senderName
 					});
+
 					continue;
 				}
+
+				// ──────────────────────────────────────────────────────────────
+				// Filter non-conversation SDK message types
+				// These are transient/metadata events that should NOT be saved
+				// to the database. Some are converted to notifications.
+				// ──────────────────────────────────────────────────────────────
+
+				// Handle rate_limit_event — convert to notification, don't save
+				if (message.type === 'rate_limit_event') {
+					const rateLimitMsg = message as any;
+					const info = rateLimitMsg.rate_limit_info;
+					if (info?.status === 'rejected' || info?.status === 'allowed_warning') {
+						const isRejected = info.status === 'rejected';
+						const resetTime = info.resetsAt
+							? new Date(info.resetsAt * 1000).toLocaleTimeString()
+							: 'unknown';
+						this.emitStreamEvent(streamState, 'notification', {
+							notification: {
+								type: isRejected ? 'error' : 'warning',
+								title: isRejected ? 'Rate Limit Reached' : 'Rate Limit Warning',
+								message: isRejected
+									? `Rate limit exceeded. Resets at ${resetTime}.`
+									: `Approaching rate limit (${Math.round((info.utilization || 0) * 100)}% used). Resets at ${resetTime}.`,
+								icon: isRejected ? 'lucide:ban' : 'lucide:alert-triangle'
+							},
+							timestamp: new Date().toISOString()
+						});
+					}
+					continue;
+				}
+
+				// Handle result messages — extract useful info, don't save to DB
+				if (message.type === 'result') {
+					const resultMsg = message as any;
+					if (resultMsg.subtype !== 'success' && resultMsg.errors?.length) {
+						debug.warn('chat', `SDK result error: ${resultMsg.subtype}`, resultMsg.errors);
+					}
+					continue;
+				}
+
+				// Skip all other system subtypes that aren't conversation content
+				// (init and compact_boundary are already handled above)
+				if (message.type === 'system') {
+					const subtype = (message as any).subtype;
+					// Compact boundary is handled above — this catches remaining subtypes:
+					// status, hook_started, hook_progress, hook_response,
+					// task_notification, task_started, task_progress,
+					// files_persisted, elicitation_complete, local_command_output
+					if (subtype !== 'compact_boundary') {
+						debug.log('chat', `[SM] Skipping system message subtype: ${subtype}`);
+						continue;
+					}
+				}
+
+				// Skip transient metadata events (not conversation content)
+				if (
+					message.type === 'tool_progress' ||
+					message.type === 'auth_status' ||
+					message.type === 'tool_use_summary' ||
+					message.type === 'prompt_suggestion'
+				) {
+					debug.log('chat', `[SM] Skipping transient message type: ${message.type}`);
+					continue;
+				}
+
+				// ──────────────────────────────────────────────────────────────
+				// Handle partial messages (streaming events)
+				// ──────────────────────────────────────────────────────────────
 
 				// Handle partial messages (streaming events)
 				if (message.type === 'stream_event') {

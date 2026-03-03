@@ -241,8 +241,10 @@
 	async function catchupActiveStream(status: any) {
 		if (!status?.streams?.length || !sessionState.currentSession?.id) return;
 
-		// Find the active stream
-		const activeStream = status.streams.find((s: any) => s.status === 'active');
+		// Find the active stream for the current session
+		const activeStream = status.streams.find(
+			(s: any) => s.status === 'active' && s.chatSessionId === sessionState.currentSession?.id
+		);
 		if (!activeStream) return;
 
 		try {
@@ -251,27 +253,67 @@
 			});
 
 			if (streamState && streamState.status === 'active' && streamState.processId) {
-				// Check if we already have a streaming message for this processId
-				const hasStreamingMessage = sessionState.messages.some(
-					(m: any) => m.type === 'stream_event' && m.processId === streamState.processId
-				);
+				// ── Inject reasoning stream_event (if available) ──
+				if (streamState.currentReasoningText) {
+					const hasReasoningStream = sessionState.messages.some(
+						(m: any) => m.type === 'stream_event' && m.metadata?.reasoning && m.processId === streamState.processId
+					);
 
-				if (!hasStreamingMessage) {
-					// Inject streaming message with the current partial text from the server
-					const streamingMessage = {
-						type: 'stream_event' as const,
-						processId: streamState.processId,
-						partialText: streamState.currentPartialText || '',
-						timestamp: new Date().toISOString()
-					};
-					(sessionState.messages as any[]).push(streamingMessage);
-				} else {
-					// Update existing stream_event with latest partial text
-					const existingMsg = sessionState.messages.find(
+					if (!hasReasoningStream) {
+						const reasoningMessage = {
+							type: 'stream_event' as const,
+							processId: streamState.processId,
+							partialText: streamState.currentReasoningText,
+							metadata: { reasoning: true }
+						};
+						(sessionState.messages as any[]).push(reasoningMessage);
+					} else {
+						const existingReasoning = sessionState.messages.find(
+							(m: any) => m.type === 'stream_event' && m.metadata?.reasoning && m.processId === streamState.processId
+						);
+						if (existingReasoning) {
+							(existingReasoning as any).partialText = streamState.currentReasoningText;
+						}
+					}
+				}
+
+				// ── Inject regular text stream_event (if available) ──
+				if (streamState.currentPartialText) {
+					const hasTextStream = sessionState.messages.some(
+						(m: any) => m.type === 'stream_event' && !m.metadata?.reasoning && m.processId === streamState.processId
+					);
+
+					if (!hasTextStream) {
+						const streamingMessage = {
+							type: 'stream_event' as const,
+							processId: streamState.processId,
+							partialText: streamState.currentPartialText,
+							metadata: {}
+						};
+						(sessionState.messages as any[]).push(streamingMessage);
+					} else {
+						const existingMsg = sessionState.messages.find(
+							(m: any) => m.type === 'stream_event' && !m.metadata?.reasoning && m.processId === streamState.processId
+						);
+						if (existingMsg) {
+							(existingMsg as any).partialText = streamState.currentPartialText;
+						}
+					}
+				}
+
+				// If neither text nor reasoning is available yet, inject an empty
+				// stream_event placeholder so the loading indicator is visible
+				if (!streamState.currentPartialText && !streamState.currentReasoningText) {
+					const hasAnyStream = sessionState.messages.some(
 						(m: any) => m.type === 'stream_event' && m.processId === streamState.processId
 					);
-					if (existingMsg && streamState.currentPartialText) {
-						(existingMsg as any).partialText = streamState.currentPartialText;
+					if (!hasAnyStream) {
+						(sessionState.messages as any[]).push({
+							type: 'stream_event' as const,
+							processId: streamState.processId,
+							partialText: '',
+							metadata: {}
+						});
 					}
 				}
 
@@ -286,7 +328,8 @@
 
 				debug.log('chat', 'Caught up with active stream:', {
 					processId: streamState.processId,
-					partialLength: streamState.currentPartialText?.length || 0
+					partialLength: streamState.currentPartialText?.length || 0,
+					reasoningLength: streamState.currentReasoningText?.length || 0
 				});
 			}
 		} catch (error) {

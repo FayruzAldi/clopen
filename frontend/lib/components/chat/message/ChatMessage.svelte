@@ -61,6 +61,10 @@
 	const shouldBeDimmed = $derived(shouldDimMessage(messageId));
 
 	const roleCategory = $derived.by(() => {
+		// Compact boundary messages (conversation compaction indicator)
+		if (message.type === 'system' && (message as any).subtype === 'compact_boundary') {
+			return 'compact';
+		}
 		// Reasoning messages (from both engines)
 		if (message.metadata?.reasoning) {
 			return 'reasoning';
@@ -193,6 +197,12 @@
 
 	const roleConfig = $derived.by((): { gradient: string; icon: IconName; name: string } => {
 		switch (roleCategory) {
+			case 'compact':
+				return {
+					gradient: 'from-amber-500 to-orange-600',
+					icon: 'lucide:layers',
+					name: 'System'
+				};
 			case 'reasoning':
 				return {
 					gradient: 'from-emerald-500 to-green-600',

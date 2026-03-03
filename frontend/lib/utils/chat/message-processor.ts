@@ -63,10 +63,26 @@ export const HIDDEN_TOOLS: ToolInput['name'][] = [
   'TodoWrite'
 ];
 
+// Message types that represent actual conversation content and should be rendered.
+// All other types are transient/metadata and should be filtered out.
+const RENDERABLE_MESSAGE_TYPES = new Set(['assistant', 'user', 'stream_event']);
+
+// Check if this is a compact boundary message (system.compact_boundary)
+export function isCompactBoundaryMessage(message: SDKMessageFormatter): boolean {
+  return message.type === 'system' && (message as any).subtype === 'compact_boundary';
+}
+
 // Check if a message should be filtered out
 export function shouldFilterMessage(message: SDKMessageFormatter): boolean {
-  // Skip system and result type messages
-  if (message.type === 'system' || message.type === 'result') {
+  // Allow compact boundary messages (displayed as separator in chat)
+  if (isCompactBoundaryMessage(message)) {
+    return false;
+  }
+
+  // Whitelist approach: only render conversation content types.
+  // Filters out: system, result, rate_limit_event, tool_progress,
+  // auth_status, tool_use_summary, prompt_suggestion, and any future unknown types.
+  if (!RENDERABLE_MESSAGE_TYPES.has(message.type)) {
     return true;
   }
 

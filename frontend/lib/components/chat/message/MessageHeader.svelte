@@ -59,7 +59,7 @@
 	}
 </script>
 
-<div class="flex items-center justify-between gap-5 px-3 md:px-4 py-1 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+<div class="flex items-center justify-between gap-5 h-8 px-3 md:px-4 py-1 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
 	<!-- Timestamp and Type -->
 	<div class="flex items-center gap-2">
 		<span class="text-xs text-slate-500 dark:text-slate-400 font-medium">

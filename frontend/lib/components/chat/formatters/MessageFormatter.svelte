@@ -39,6 +39,17 @@
 	function parseContent() {
 		const elements: ContentElement[] = [];
 
+		// Handle compact boundary messages (conversation compaction indicator)
+		if (message.type === 'system' && (message as any).subtype === 'compact_boundary') {
+			const compactMeta = (message as any).compact_metadata;
+			const trigger = compactMeta?.trigger === 'manual' ? 'Manual' : 'Auto';
+			elements.push({
+				type: 'text',
+				content: `Context was compacted (${trigger}). Previous messages have been summarized to free up context space.`
+			});
+			return elements;
+		}
+
 		// Handle partial messages (streaming) — both text and reasoning
 		if (message.type === 'stream_event') {
 			if ('partialText' in message && message.partialText) {

@@ -62,7 +62,7 @@
 </script>
 
 <!-- Date Separator -->
-<div class="flex items-center justify-center my-3 md:my-4 px-4 md:px-6 select-none">
+<div class="flex items-center justify-center mt-6 mb-3 md:mt-8 md:mb-4 px-4 md:px-6 select-none">
 	<div class="relative flex items-center w-full max-w-md">
 		<!-- Left line -->
 		<div
