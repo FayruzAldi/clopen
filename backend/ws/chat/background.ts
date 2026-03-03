@@ -82,6 +82,7 @@ export const backgroundHandler = createRouter()
 			processId: t.String(),
 			messages: t.Array(t.Any()),
 			currentPartialText: t.Optional(t.String()),
+			currentReasoningText: t.Optional(t.String()),
 			error: t.Optional(t.String()),
 			startedAt: t.String(),
 			completedAt: t.Optional(t.String())
@@ -106,6 +107,7 @@ export const backgroundHandler = createRouter()
 				processId: '',
 				messages: [],
 				currentPartialText: undefined,
+				currentReasoningText: undefined,
 				error: undefined,
 				startedAt: new Date().toISOString(),
 				completedAt: new Date().toISOString()
@@ -122,6 +124,7 @@ export const backgroundHandler = createRouter()
 			processId: streamState.processId,
 			messages,
 			currentPartialText: streamState.currentPartialText,
+			currentReasoningText: streamState.currentReasoningText,
 			error: streamState.error,
 			startedAt: streamState.startedAt.toISOString(),
 			completedAt: streamState.completedAt?.toISOString()

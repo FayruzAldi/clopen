@@ -30,6 +30,7 @@ export function formatDatabaseMessage(
 		metadata: {
 			...buildMetadataFromDb(msg, overrides),
 			...(sdkMessage.metadata?.reasoning && { reasoning: true }),
+			...(sdkMessage.metadata?.interrupted && { interrupted: true }),
 		}
 	};
 }

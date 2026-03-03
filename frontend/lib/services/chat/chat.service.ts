@@ -11,7 +11,8 @@
  * - Proper presence synchronization
  */
 
-import { appState } from '$frontend/lib/stores/core/app.svelte';
+import { appState, updateSessionProcessState } from '$frontend/lib/stores/core/app.svelte';
+import type { SessionProcessState } from '$frontend/lib/stores/core/app.svelte';
 import { chatModelState } from '$frontend/lib/stores/ui/chat-model.svelte';
 import { projectState } from '$frontend/lib/stores/core/projects.svelte';
 import { sessionState, setCurrentSession, createSession, updateSession } from '$frontend/lib/stores/core/sessions.svelte';
@@ -22,6 +23,14 @@ import type { ChatServiceOptions } from '$shared/types/messaging';
 import { buildMetadataFromTransport } from '$shared/utils/message-formatter';
 import { debug } from '$shared/utils/logger';
 import ws from '$frontend/lib/utils/ws';
+
+/**
+ * Tools that block the SDK waiting for user interaction.
+ * When these tools appear in an assistant message without a result,
+ * and the stream is active, the chat status switches to "waiting for input".
+ * Extend this list for future interactive tools.
+ */
+const INTERACTIVE_TOOLS = new Set(['AskUserQuestion']);
 
 class ChatService {
   private activeProcessId: string | null = null;
@@ -56,6 +65,30 @@ class ChatService {
 
   constructor() {
     this.setupWebSocketHandlers();
+  }
+
+  /**
+   * Update process state for a session.
+   * Writes to both the per-session map (for multi-session support)
+   * and global convenience flags (for backward-compatible single-session components).
+   *
+   * @param update - Partial state to merge
+   * @param sessionId - Override session ID (defaults to this.currentSessionId or current session)
+   */
+  private setProcessState(
+    update: Partial<SessionProcessState>,
+    sessionId?: string | null
+  ): void {
+    const resolvedId = sessionId ?? this.currentSessionId ?? sessionState.currentSession?.id;
+    if (resolvedId) {
+      updateSessionProcessState(resolvedId, update);
+    }
+    // Always sync to global convenience flags
+    if ('isLoading' in update) appState.isLoading = update.isLoading!;
+    if ('isWaitingInput' in update) appState.isWaitingInput = update.isWaitingInput!;
+    if ('isCancelling' in update) appState.isCancelling = update.isCancelling!;
+    if ('isRestoring' in update) appState.isRestoring = update.isRestoring!;
+    if ('error' in update && update.error !== undefined) appState.error = update.error;
   }
 
   /**
@@ -137,8 +170,10 @@ class ChatService {
 
       this.streamCompleted = true;
       this.reconnected = false;
-      appState.isLoading = false;
-      appState.isCancelling = false;
+      this.setProcessState({ isLoading: false, isWaitingInput: false, isCancelling: false });
+
+      // Mark any tool_use blocks that never got a tool_result
+      this.markInterruptedTools();
 
       // Stream completed successfully — all old cancelled streams' events
       // have definitely been delivered by now, so clear the blacklist.
@@ -161,8 +196,10 @@ class ChatService {
       this.streamCompleted = true;
       this.reconnected = false;
       this.activeProcessId = null;
-      appState.isLoading = false;
-      appState.isCancelling = false;
+      this.setProcessState({ isLoading: false, isWaitingInput: false, isCancelling: false });
+
+      // Mark any tool_use blocks that never got a tool_result
+      this.markInterruptedTools();
 
       // Notifications handled by GlobalStreamMonitor via chat:stream-finished
     });
@@ -178,8 +215,10 @@ class ChatService {
       // (e.g. from multiple subscriptions or late-arriving events with different processId/seq)
       this.streamCompleted = true;
       this.reconnected = false;
-      appState.isLoading = false;
-      appState.isCancelling = false;
+      this.setProcessState({ isLoading: false, isWaitingInput: false, isCancelling: false });
+
+      // Mark any tool_use blocks that never got a tool_result
+      this.markInterruptedTools();
 
       // Don't show notification for cancel-triggered errors
       if (data.error === 'Stream cancelled') return;
@@ -277,11 +316,10 @@ class ChatService {
     }
 
     // Set loading state
-    appState.isLoading = true;
-    appState.isCancelling = false;
     this.streamCompleted = false;
     this.reconnected = false;
     this.currentSessionId = sessionState.currentSession.id;
+    this.setProcessState({ isLoading: true, isWaitingInput: false, isCancelling: false });
     // DON'T clear cancelledProcessIds — late events from previously cancelled
     // streams must still be blocked. The set is cleared on stream complete.
     // Clear sequence tracking for new stream
@@ -432,9 +470,9 @@ class ChatService {
     this.currentSessionId = null;
     this.streamCompleted = true;
     this.reconnected = false;
-    appState.isLoading = false;
-    // Prevent presence effect from re-enabling loading before server confirms cancel
-    appState.isCancelling = true;
+    // Update per-session map with captured ID (before it was nulled above)
+    // and global flags — cancel sets isCancelling=true to prevent presence re-enabling
+    this.setProcessState({ isLoading: false, isWaitingInput: false, isCancelling: true }, chatSessionId);
 
     // Clean up stale stream_events from the cancelled stream.
     // Without this, stale stream_events remain in the messages array and cause
@@ -465,6 +503,7 @@ class ChatService {
     this.reconnected = false;
     this.lastEventSeq.clear();
     appState.isLoading = false;
+    appState.isWaitingInput = false;
     appState.isCancelling = false;
   }
 
@@ -548,6 +587,27 @@ class ChatService {
         ...(isReasoning && { reasoning: true }),
       })
     };
+
+    // Detect interactive tool_use blocks (e.g., AskUserQuestion) and set waiting status.
+    // When the SDK is blocked on canUseTool, partial events stop and the user must interact.
+    if (sdkMessage.type === 'assistant' && sdkMessage.message?.content) {
+      const content = Array.isArray(sdkMessage.message.content) ? sdkMessage.message.content : [];
+      const hasInteractiveTool = content.some(
+        (item: any) => item.type === 'tool_use' && INTERACTIVE_TOOLS.has(item.name)
+      );
+      if (hasInteractiveTool) {
+        this.setProcessState({ isWaitingInput: true });
+      }
+    }
+
+    // When a user message with tool_result arrives, the SDK is unblocked — clear waiting status
+    if (sdkMessage.type === 'user' && sdkMessage.message?.content) {
+      const content = Array.isArray(sdkMessage.message.content) ? sdkMessage.message.content : [];
+      const hasToolResult = content.some((item: any) => item.type === 'tool_result');
+      if (hasToolResult && appState.isWaitingInput) {
+        this.setProcessState({ isWaitingInput: false });
+      }
+    }
 
     // For reasoning messages that couldn't find a matching stream_event,
     // insert BEFORE trailing non-reasoning assistant messages (tools/text)
@@ -667,6 +727,80 @@ class ChatService {
     for (let i = sessionState.messages.length - 1; i >= 0; i--) {
       if ((sessionState.messages[i] as any).type === 'stream_event') {
         sessionState.messages.splice(i, 1);
+      }
+    }
+  }
+
+  /**
+   * Detect whether any interactive tool (e.g. AskUserQuestion) is pending in the current messages.
+   * Used after browser refresh / catchup to restore the isWaitingInput state.
+   */
+  detectPendingInteractiveTools(): void {
+    if (!appState.isLoading) return;
+
+    // Collect all tool_use IDs that have a matching tool_result
+    const answeredToolIds = new Set<string>();
+    for (const msg of sessionState.messages) {
+      const msgAny = msg as any;
+      if (msgAny.type !== 'user' || !msgAny.message?.content) continue;
+      const content = Array.isArray(msgAny.message.content) ? msgAny.message.content : [];
+      for (const item of content) {
+        if (item.type === 'tool_result' && item.tool_use_id) {
+          answeredToolIds.add(item.tool_use_id);
+        }
+      }
+    }
+
+    // Check if any interactive tool is unanswered
+    for (const msg of sessionState.messages) {
+      const msgAny = msg as any;
+      if (msgAny.type !== 'assistant' || !msgAny.message?.content) continue;
+      const content = Array.isArray(msgAny.message.content) ? msgAny.message.content : [];
+      const hasPendingInteractive = content.some(
+        (item: any) => item.type === 'tool_use' && INTERACTIVE_TOOLS.has(item.name) && item.id && !answeredToolIds.has(item.id)
+      );
+      if (hasPendingInteractive) {
+        this.setProcessState({ isWaitingInput: true });
+        return;
+      }
+    }
+  }
+
+  /**
+   * Mark assistant messages with unanswered tool_use blocks as interrupted.
+   * Sets metadata.interrupted at the MESSAGE level (not tool_use content level).
+   * Called when stream ends (complete/error/cancel) for immediate in-memory update.
+   * The backend persists this to DB via stream:lifecycle for durability.
+   */
+  private markInterruptedTools(): void {
+    // Collect all tool_use IDs that have a matching tool_result
+    const answeredToolIds = new Set<string>();
+
+    for (const msg of sessionState.messages) {
+      const msgAny = msg as any;
+      if (msgAny.type !== 'user' || !msgAny.message?.content) continue;
+      const content = Array.isArray(msgAny.message.content) ? msgAny.message.content : [];
+
+      for (const item of content) {
+        if (item.type === 'tool_result' && item.tool_use_id) {
+          answeredToolIds.add(item.tool_use_id);
+        }
+      }
+    }
+
+    // Mark messages with unanswered tool_use blocks as interrupted (message-level metadata)
+    for (const msg of sessionState.messages) {
+      const msgAny = msg as any;
+      if (msgAny.type !== 'assistant' || !msgAny.message?.content) continue;
+      const content = Array.isArray(msgAny.message.content) ? msgAny.message.content : [];
+
+      const hasUnansweredTool = content.some(
+        (item: any) => item.type === 'tool_use' && item.id && !answeredToolIds.has(item.id)
+      );
+
+      if (hasUnansweredTool && !msgAny.metadata?.interrupted) {
+        if (!msgAny.metadata) msgAny.metadata = {};
+        msgAny.metadata.interrupted = true;
       }
     }
   }

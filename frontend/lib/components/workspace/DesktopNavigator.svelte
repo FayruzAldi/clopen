@@ -17,6 +17,7 @@
 	import TunnelModal from '$frontend/lib/components/tunnel/TunnelModal.svelte';
 	import ProjectUserAvatars from '$frontend/lib/components/common/ProjectUserAvatars.svelte';
 	import { sessionState } from '$frontend/lib/stores/core/sessions.svelte';
+	import { getSessionProcessState } from '$frontend/lib/stores/core/app.svelte';
 	import ws from '$frontend/lib/utils/ws';
 
 	// State
@@ -121,7 +122,7 @@
 		const hasActiveForSession = status.streams.some(
 			(s: any) => s.status === 'active' && s.chatSessionId === currentChatSessionId
 		);
-		if (hasActiveForSession) return 'bg-emerald-500';
+		if (hasActiveForSession) return currentChatSessionId && getSessionProcessState(currentChatSessionId).isWaitingInput ? 'bg-amber-500' : 'bg-emerald-500';
 		return 'bg-slate-500/30';
 	}
 

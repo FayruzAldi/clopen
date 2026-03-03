@@ -52,7 +52,7 @@ export const CLAUDE_CODE_MODELS: EngineModel[] = [
 		id: 'claude-code:sonnet',
 		engine: 'claude-code',
 		modelId: 'sonnet',
-		name: 'Sonnet 4.5',
+		name: 'Sonnet 4.6',
 		provider: 'anthropic',
 		description: 'High-performance model with excellent coding capabilities and extended thinking',
 		capabilities: ['Reasoning', 'Attachments'],

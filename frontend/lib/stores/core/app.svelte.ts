@@ -15,13 +15,40 @@ interface PageInfo {
 	actions?: import('svelte').Snippet;
 }
 
-interface AppState {
-	// UI Navigation
-	currentView: string;
+/**
+ * Per-session process state.
+ * Tracks loading/waiting/cancelling state for each chat session independently,
+ * enabling correct multi-session and multi-project support.
+ */
+export interface SessionProcessState {
 	isLoading: boolean;
+	isWaitingInput: boolean;
 	isRestoring: boolean;
 	isCancelling: boolean;
 	error: string | null;
+}
+
+const DEFAULT_SESSION_STATE: SessionProcessState = {
+	isLoading: false,
+	isWaitingInput: false,
+	isRestoring: false,
+	isCancelling: false,
+	error: null,
+};
+
+interface AppState {
+	// UI Navigation
+	currentView: string;
+
+	// Current session process state (convenience — synced from sessionStates for the active session)
+	isLoading: boolean;
+	isWaitingInput: boolean;
+	isRestoring: boolean;
+	isCancelling: boolean;
+	error: string | null;
+
+	// Per-session process states (source of truth for multi-session support)
+	sessionStates: Record<string, SessionProcessState>;
 
 	// Page Information
 	pageInfo: PageInfo;
@@ -36,9 +63,13 @@ export const appState = $state<AppState>({
 	// UI Navigation
 	currentView: 'chat',
 	isLoading: false,
+	isWaitingInput: false,
 	isRestoring: false,
 	isCancelling: false,
 	error: null,
+
+	// Per-session process states
+	sessionStates: {},
 
 	// Page Information
 	pageInfo: {
@@ -51,6 +82,52 @@ export const appState = $state<AppState>({
 	isAppLoading: true,
 	isAppInitialized: false
 });
+
+// ========================================
+// PER-SESSION PROCESS STATE MANAGEMENT
+// ========================================
+
+/**
+ * Get the process state for a specific session.
+ * Returns default (idle) state if the session has no entry.
+ */
+export function getSessionProcessState(sessionId: string): SessionProcessState {
+	return appState.sessionStates[sessionId] ?? DEFAULT_SESSION_STATE;
+}
+
+/**
+ * Update process state for a specific session in the per-session map.
+ * Does NOT touch global convenience flags — caller is responsible for that.
+ */
+export function updateSessionProcessState(
+	sessionId: string,
+	update: Partial<SessionProcessState>
+): void {
+	if (!appState.sessionStates[sessionId]) {
+		appState.sessionStates[sessionId] = { ...DEFAULT_SESSION_STATE };
+	}
+	Object.assign(appState.sessionStates[sessionId], update);
+}
+
+/**
+ * Sync global convenience flags from a session's per-session state.
+ * Call when switching sessions to derive global state from the new session.
+ */
+export function syncGlobalStateFromSession(sessionId: string): void {
+	const state = appState.sessionStates[sessionId] ?? DEFAULT_SESSION_STATE;
+	appState.isLoading = state.isLoading;
+	appState.isWaitingInput = state.isWaitingInput;
+	appState.isRestoring = state.isRestoring;
+	appState.isCancelling = state.isCancelling;
+	appState.error = state.error;
+}
+
+/**
+ * Remove a session's process state entry (e.g. when deleting a session).
+ */
+export function clearSessionProcessState(sessionId: string): void {
+	delete appState.sessionStates[sessionId];
+}
 
 // ========================================
 // UI STATE MANAGEMENT

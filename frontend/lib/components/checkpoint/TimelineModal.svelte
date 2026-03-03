@@ -291,8 +291,13 @@
 					</div>
 				{:else if appState.isLoading}
 					<div class="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
-						<Icon name="lucide:loader" class="w-3 h-3 text-amber-600 dark:text-amber-400 animate-spin" />
-						<span class="text-xs text-amber-600 dark:text-amber-400">Chat in progress...</span>
+						{#if appState.isWaitingInput}
+							<Icon name="lucide:message-circle-question-mark" class="w-3 h-3 text-amber-600 dark:text-amber-400" />
+							<span class="text-xs text-amber-600 dark:text-amber-400">Waiting for input...</span>
+						{:else}
+							<Icon name="lucide:loader" class="w-3 h-3 text-amber-600 dark:text-amber-400 animate-spin" />
+							<span class="text-xs text-amber-600 dark:text-amber-400">Chat in progress...</span>
+						{/if}
 					</div>
 				{/if}
 			</div>

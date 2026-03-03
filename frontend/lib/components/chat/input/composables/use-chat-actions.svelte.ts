@@ -34,7 +34,7 @@ export function useChatActions(params: ChatActionsParams) {
 
 	// Handle send message with SDK streaming
 	async function sendMessage(messageText: string, setMessageText: (value: string) => void) {
-		if ((!messageText.trim() && params.attachedFiles.length === 0) || appState.isLoading) return;
+		if ((!messageText.trim() && params.attachedFiles.length === 0) || appState.isLoading || appState.isWaitingInput) return;
 
 		// Initialize sound notifications on first user interaction (browser policy requirement)
 		soundNotification.initialize();

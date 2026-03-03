@@ -91,8 +91,7 @@
 	const processedContent = $derived(processContent(content));
 </script>
 
-<div class="message-content">
-	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+<div class="message-content space-y-4 wrap-break-word">
 	{@html processedContent}
 </div>
 
@@ -101,7 +100,6 @@
 	:global(.message-content) {
 		color: rgb(30 41 59);
 		line-height: 1.5;
-		margin-bottom: -1rem;
 	}
 
 	:global(.dark .message-content) {
@@ -109,21 +107,11 @@
 	}
 	
 	/* Headings */
-	:global(.message-content h1:first-child),
-	:global(.message-content h2:first-child),
-	:global(.message-content h3:first-child),
-	:global(.message-content h4:first-child),
-	:global(.message-content h5:first-child),
-	:global(.message-content h6:first-child) {
+	:global(.message-content *:first-child) {
 		margin-top: 0;
 	}
 
-	:global(.message-content h1:last-child),
-	:global(.message-content h2:last-child),
-	:global(.message-content h3:last-child),
-	:global(.message-content h4:last-child),
-	:global(.message-content h5:last-child),
-	:global(.message-content h6:last-child) {
+	:global(.message-content *:last-child) {
 		margin-bottom: 0;
 	}
 

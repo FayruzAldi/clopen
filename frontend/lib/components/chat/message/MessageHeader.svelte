@@ -35,7 +35,7 @@
 		isLastUserMessage?: boolean;
 		roleConfig: { gradient: string; icon: IconName; name: string };
 		roleCategory: 'user' | 'assistant' | 'agent' | string;
-		agentStatus: 'processing' | 'success' | 'error' | null;
+		agentStatus: 'processing' | 'waiting' | 'success' | 'error' | null;
 		senderName: string | null;
 		hasTokenUsageData: any;
 		formatTime: (timestamp?: string) => string;
@@ -59,7 +59,7 @@
 	}
 </script>
 
-<div class="flex items-center justify-between gap-5 px-3 md:px-4 py-1 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+<div class="flex items-center justify-between gap-5 h-8 px-3 md:px-4 py-1 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
 	<!-- Timestamp and Type -->
 	<div class="flex items-center gap-2">
 		<span class="text-xs text-slate-500 dark:text-slate-400 font-medium">
@@ -75,6 +75,10 @@
 				{#if agentStatus === 'processing'}
 					<span title="Agent is processing...">
 						<Icon name="lucide:loader" class="w-3 h-3 text-violet-500 dark:text-violet-400 animate-spin" />
+					</span>
+				{:else if agentStatus === 'waiting'}
+					<span title="Waiting for your input...">
+						<Icon name="lucide:message-circle-question-mark" class="w-3 h-3 text-amber-500 dark:text-amber-400" />
 					</span>
 				{:else if agentStatus === 'success'}
 					<span title="Agent completed successfully">
@@ -143,15 +147,13 @@
 		{/if}
 
 		<!-- Debug toggle button -->
-		{#if 'parent_tool_use_id' in message}
-			<button
-				onclick={onShowDebug}
-				class="inline-flex p-1.5 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors opacity-60 hover:opacity-100"
-				aria-label="Show debug info"
-				title="Debug info"
-			>
-				<Icon name="lucide:bug" class="w-3.5 h-3.5" />
-			</button>
-		{/if}
+		<button
+			onclick={onShowDebug}
+			class="inline-flex p-1.5 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors opacity-60 hover:opacity-100"
+			aria-label="Show debug info"
+			title="Debug info"
+		>
+			<Icon name="lucide:bug" class="w-3.5 h-3.5" />
+		</button>
 	</div>
 </div>

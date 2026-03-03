@@ -8,21 +8,18 @@
 	const plan = (toolInput.input as any).plan as string || '';
 </script>
 
-<div class="bg-white dark:bg-slate-800 rounded-md border border-slate-200/60 dark:border-slate-700/60 p-3">
+<div class="bg-white dark:bg-slate-800 rounded-md border border-slate-200/60 dark:border-slate-700/60 p-3 mb-4">
 	<!-- Plan Info -->
-	<div class="flex gap-3 mb-2">
+	<div class="flex gap-3 mb-2.5">
 		<InfoLine icon="lucide:map" text="Exiting plan mode with proposed plan" />
 	</div>
 	
-	<!-- Plan Content -->
-	<div class="border-t border-slate-200 dark:border-slate-700 pt-3">
-		<CodeBlock code={plan} type="neutral" label="Plan" />
-	</div>
+	<CodeBlock code={plan} type="neutral" />
 </div>
 
 <!-- Tool Result -->
 {#if toolInput.$result}
-	<div class="mt-4 bg-white dark:bg-slate-800 rounded-md border border-slate-200/60 dark:border-slate-700/60 p-3">
+	<div class="">
 		{#if typeof toolInput.$result.content === 'string'}
 			<TextMessage content={toolInput.$result.content} />
 		{:else}

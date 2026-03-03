@@ -39,6 +39,12 @@ This document provides guidelines for Claude Code when working on the Clopen pro
 
 ## PROJECT-SPECIFIC GUIDELINES
 
+### Runtime & Package Manager
+
+- **Bun-only project** — Node.js and Deno are NOT supported
+- Always use `bun` commands (never npm/pnpm/yarn)
+- Runtime checks exist in `bin/clopen.ts` and `backend/index.ts`
+
 ### Architecture
 
 - **Backend:** Bun + Elysia with WebSocket architecture

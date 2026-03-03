@@ -69,6 +69,7 @@ export type SDKMessageFormatter = EngineSDKMessage & {
 		parent_message_id?: string | null; // Git-like parent pointer
 		engine?: string; // Engine type that produced this message (claude-code, opencode)
 		reasoning?: boolean; // Whether this message is a reasoning/thinking message
+		interrupted?: boolean; // Whether the stream ended before all tools got results
 	};
 };
 

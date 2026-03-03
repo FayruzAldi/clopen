@@ -36,7 +36,7 @@
 		isLastUserMessage?: boolean;
 		roleConfig: { gradient: string; icon: IconName; name: string };
 		roleCategory: 'user' | 'assistant' | 'agent' | string;
-		agentStatus: 'processing' | 'success' | 'error' | null;
+		agentStatus: 'processing' | 'waiting' | 'success' | 'error' | null;
 		senderName: string | null;
 		hasTokenUsageData: any;
 		formatTime: (timestamp?: string) => string;
@@ -74,7 +74,7 @@
 
 		<!-- Message Content -->
 		<div class="p-3 md:p-4">
-			<div class="max-w-none">
+			<div class="max-w-none space-y-4">
 				<!-- Content rendering using MessageFormatter component -->
 				<MessageFormatter {message} />
 			</div>

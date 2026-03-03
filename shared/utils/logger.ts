@@ -58,7 +58,7 @@ interface LoggerConfig {
 // enabled = true in development, false in production
 const config: LoggerConfig = {
 	enabled: process.env.NODE_ENV !== 'production',
-	filterLabels: ['terminal'],
+	filterLabels: null,
 	filterMethods: null,
 	filterText: null
 };
