@@ -190,9 +190,12 @@ export const accountsHandler = createRouter()
 		ptyEnv['CLAUDE_CONFIG_DIR'] = getClaudeUserConfigDir();
 		ptyEnv['BROWSER'] = 'false';
 
+		const isWindows = process.platform === 'win32';
+		const executable = isWindows ? 'claude.cmd' : 'claude';
+
 		let pty: ReturnType<typeof spawn>;
 		try {
-			pty = spawn('claude', ['setup-token'], {
+			pty = spawn(executable, ['setup-token'], {
 				name: 'xterm-256color',
 				cols: 1000,
 				rows: 30,

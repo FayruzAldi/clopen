@@ -102,7 +102,7 @@ export async function getShellConfig(preferGitBash = false): Promise<{
 		// For Windows, always use PowerShell as the primary shell
 		// PowerShell is available on all modern Windows systems
 		return {
-			shell: 'powershell',
+			shell: 'powershell.exe',
 			args: (command: string) => ['-NoProfile', '-Command', command],
 			name: 'PowerShell',
 			isUnixLike: false
@@ -189,7 +189,7 @@ export function createPty(shell: string, args: string[], cwd: string, terminalSi
 	
 	if (isWindows) {
 		// Windows: Always use PowerShell
-		if (shell === 'powershell') {
+		if (shell === 'powershell' || shell === 'powershell.exe') {
 			// Extract the actual command from args
 			let actualCommand = args.join(' ');
 			if (args.length >= 2 && (args[0] === '-Command' || args[0] === '-NoProfile')) {
@@ -201,7 +201,7 @@ export function createPty(shell: string, args: string[], cwd: string, terminalSi
 					actualCommand = args[args.length - 1];
 				}
 			}
-			return spawn('powershell', ['-NoProfile', '-NoLogo', '-Command', actualCommand], {
+			return spawn('powershell.exe', ['-NoProfile', '-NoLogo', '-Command', actualCommand], {
 				name: 'xterm-256color',
 				cols,
 				rows,
@@ -211,7 +211,7 @@ export function createPty(shell: string, args: string[], cwd: string, terminalSi
 		}
 		
 		// Default to PowerShell if shell is not recognized
-		return spawn('powershell', ['-NoProfile', '-NoLogo', '-Command', args.join(' ') || 'Write-Host "Terminal ready"'], {
+		return spawn('powershell.exe', ['-NoProfile', '-NoLogo', '-Command', args.join(' ') || 'Write-Host "Terminal ready"'], {
 			name: 'xterm-256color',
 			cols,
 			rows,
