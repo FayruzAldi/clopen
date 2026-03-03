@@ -147,15 +147,13 @@
 		{/if}
 
 		<!-- Debug toggle button -->
-		{#if 'parent_tool_use_id' in message}
-			<button
-				onclick={onShowDebug}
-				class="inline-flex p-1.5 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors opacity-60 hover:opacity-100"
-				aria-label="Show debug info"
-				title="Debug info"
-			>
-				<Icon name="lucide:bug" class="w-3.5 h-3.5" />
-			</button>
-		{/if}
+		<button
+			onclick={onShowDebug}
+			class="inline-flex p-1.5 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors opacity-60 hover:opacity-100"
+			aria-label="Show debug info"
+			title="Debug info"
+		>
+			<Icon name="lucide:bug" class="w-3.5 h-3.5" />
+		</button>
 	</div>
 </div>
