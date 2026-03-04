@@ -325,8 +325,8 @@
 		return result;
 	}
 
-	const diffGroups = computeDiff(oldString, newString);
-	const hasChanges = diffGroups.some(group => group.type === 'change');
+	const diffGroups = $derived(computeDiff(oldString, newString));
+	const hasChanges = $derived(diffGroups.some(group => group.type === 'change'));
 </script>
 
 <div>

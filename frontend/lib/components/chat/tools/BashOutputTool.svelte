@@ -5,9 +5,9 @@
 
 	const { toolInput }: { toolInput: BashOutputToolInput } = $props();
 
-	const taskId = toolInput.input.task_id;
-	const block = toolInput.input.block;
-	const timeout = toolInput.input.timeout;
+	const taskId = $derived(toolInput.input.task_id);
+	const block = $derived(toolInput.input.block);
+	const timeout = $derived(toolInput.input.timeout);
 </script>
 
 <div class="bg-white dark:bg-slate-800 rounded-md border border-slate-200/60 dark:border-slate-700/60 p-3">

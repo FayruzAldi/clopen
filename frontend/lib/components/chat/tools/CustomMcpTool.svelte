@@ -25,7 +25,9 @@
 		};
 	}
 
-	const { server, tool } = parseMcpToolName(toolInput.name);
+	const parsedToolName = $derived(parseMcpToolName(toolInput.name));
+	const server = $derived(parsedToolName.server);
+	const tool = $derived(parsedToolName.tool);
 
 	// Format server name for display (e.g., "weather-service" -> "Weather Service")
 	const serverDisplayName = $derived.by(() => {

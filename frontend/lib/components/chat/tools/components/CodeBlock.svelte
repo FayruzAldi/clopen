@@ -56,9 +56,9 @@
 		}
 	};
 
-	const style = styles[type];
-	const formattedCode = formatCode(code);
-	const isTerminal = isTerminalOutput(code);
+	const style = $derived(styles[type]);
+	const formattedCode = $derived(formatCode(code));
+	const isTerminal = $derived(isTerminalOutput(code));
 </script>
 
 <div>

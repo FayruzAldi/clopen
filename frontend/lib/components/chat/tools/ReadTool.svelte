@@ -5,10 +5,10 @@
 
 	const { toolInput }: { toolInput: ReadToolInput } = $props();
 	
-	const filePath = toolInput.input.file_path || '';
-	const fileName = filePath.split(/[/\\]/).pop() || filePath || 'unknown';
-	const hasLimit = toolInput.input.limit !== undefined;
-	const hasOffset = toolInput.input.offset !== undefined;
+	const filePath = $derived(toolInput.input.file_path || '');
+	const fileName = $derived(filePath.split(/[/\\]/).pop() || filePath || 'unknown');
+	const hasLimit = $derived(toolInput.input.limit !== undefined);
+	const hasOffset = $derived(toolInput.input.offset !== undefined);
 </script>
 
 <div class="bg-white dark:bg-slate-800 rounded-md border border-slate-200/60 dark:border-slate-700/60 p-3">

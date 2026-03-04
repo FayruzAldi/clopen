@@ -33,7 +33,7 @@
 		lg: 'px-4 md:px-6 py-3 text-sm md:text-base rounded-lg'
 	};
 
-	const buttonClasses = `${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`;
+	const buttonClasses = $derived(`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`);
 
 	function handleClick() {
 		if (!disabled && !loading && onclick) {

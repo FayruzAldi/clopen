@@ -7,8 +7,8 @@
 
 	const { toolInput }: { toolInput: GrepToolInput } = $props();
 
-	const pattern = toolInput.input.pattern || '';
-	const searchPath = toolInput.input.path || 'current directory';
+	const pattern = $derived(toolInput.input.pattern || '');
+	const searchPath = $derived(toolInput.input.path || 'current directory');
 
 	// Get active search parameters for display
 	function getActiveParameters() {
@@ -55,10 +55,10 @@
 		return params;
 	}
 
-	const activeParameters = getActiveParameters();
+	const activeParameters = $derived(getActiveParameters());
 
-	const formattedPattern = truncateText(pattern, 40);
-	const formattedPath = formatPath(searchPath);
+	const formattedPattern = $derived(truncateText(pattern, 40));
+	const formattedPath = $derived(formatPath(searchPath));
 </script>
 
 <div class="bg-white dark:bg-slate-800 rounded-md border border-slate-200/60 dark:border-slate-700/60 p-3">

@@ -15,7 +15,7 @@
 		return desc;
 	}
 
-	const formattedDesc = formatDescription(toolInput.input.description || '');
+	const formattedDesc = $derived(formatDescription(toolInput.input.description || ''));
 </script>
 
 <div class="bg-white dark:bg-slate-800 rounded-md border border-slate-200/60 dark:border-slate-700/60 p-3">

@@ -12,7 +12,7 @@
 
 	const { stats, columns = 3 }: Props = $props();
 
-	const gridClass = columns === 2 ? 'grid-cols-2' : columns === 4 ? 'grid-cols-4' : 'grid-cols-3';
+	const gridClass = $derived(columns === 2 ? 'grid-cols-2' : columns === 4 ? 'grid-cols-4' : 'grid-cols-3');
 </script>
 
 <div class="grid {gridClass} gap-4 text-center text-sm">

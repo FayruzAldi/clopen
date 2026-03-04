@@ -8,7 +8,7 @@
 
 	const { layout, size = 'small' }: Props = $props();
 
-	const height = size === 'small' ? 'h-8' : 'h-12';
+	const height = $derived(size === 'small' ? 'h-8' : 'h-12');
 
 	// Panel colors - softer colors that blend with theme
 	const panelColors: Record<PanelId, string> = {

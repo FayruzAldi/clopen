@@ -5,8 +5,8 @@
 
 	const { toolInput }: { toolInput: ReadMcpResourceToolInput } = $props();
 	
-	const server = toolInput.input.server;
-	const uri = toolInput.input.uri;
+	const server = $derived(toolInput.input.server);
+	const uri = $derived(toolInput.input.uri);
 </script>
 
 <div class="bg-white dark:bg-slate-800 rounded-md border border-slate-200/60 dark:border-slate-700/60 p-3">

@@ -11,10 +11,10 @@
 
 	const { toolInput }: { toolInput: BashToolInput } = $props();
 
-	const command = toolInput.input.command || '';
-	const description = toolInput.input.description;
-	const timeout = toolInput.input.timeout;
-	const isBackground = toolInput.input.run_in_background;
+	const command = $derived(toolInput.input.command || '');
+	const description = $derived(toolInput.input.description);
+	const timeout = $derived(toolInput.input.timeout);
+	const isBackground = $derived(toolInput.input.run_in_background);
 
 	function parseBashOutputToolOutput(content: string): ParsedBashOutput {
 		const statusMatch = content.match(/<status>(.*?)<\/status>/);

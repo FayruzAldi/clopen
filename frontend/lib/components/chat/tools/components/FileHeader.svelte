@@ -14,7 +14,7 @@
 
 	const { filePath, fileName, iconColor, badges = [], box = true }: Props = $props();
 
-	const displayFileName = fileName || filePath.split(/[/\\]/).pop() || filePath;
+	const displayFileName = $derived(fileName || filePath.split(/[/\\]/).pop() || filePath);
 </script>
 
 <div class={box ? "bg-white dark:bg-slate-800 rounded-md border border-slate-200/60 dark:border-slate-700/60 p-3" : ""}>

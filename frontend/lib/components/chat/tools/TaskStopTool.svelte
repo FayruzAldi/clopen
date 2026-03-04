@@ -5,7 +5,7 @@
 
 	const { toolInput }: { toolInput: TaskStopToolInput } = $props();
 
-	const taskId = toolInput.input.task_id || toolInput.input.shell_id || 'unknown';
+	const taskId = $derived(toolInput.input.task_id || toolInput.input.shell_id || 'unknown');
 </script>
 
 <div class="bg-white dark:bg-slate-800 rounded-md border border-slate-200/60 dark:border-slate-700/60 p-3">

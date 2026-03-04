@@ -5,10 +5,10 @@
 
 	const { toolInput }: { toolInput: TodoWriteToolInput } = $props();
 
-	const todos = toolInput.input.todos;
-	const totalTodos = todos.length;
-	const completedTodos = todos.filter((t) => t.status === 'completed').length;
-	const percentage = totalTodos > 0 ? Math.round((completedTodos / totalTodos) * 100) : 0;
+	const todos = $derived(toolInput.input.todos);
+	const totalTodos = $derived(todos.length);
+	const completedTodos = $derived(todos.filter((t) => t.status === 'completed').length);
+	const percentage = $derived(totalTodos > 0 ? Math.round((completedTodos / totalTodos) * 100) : 0);
 
 	// Helper functions for todo items
 	function getStatusIcon(status: string): IconName {

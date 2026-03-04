@@ -5,13 +5,13 @@
 
 	const { toolInput }: { toolInput: EditToolInput } = $props();
 
-	const filePath = toolInput.input.file_path || '';
-	const fileName = filePath.split(/[/\\]/).pop() || filePath || 'unknown';
-	const oldString = toolInput.input.old_string || '';
-	const newString = toolInput.input.new_string || '';
-	const replaceAll = toolInput.input.replace_all || false;
+	const filePath = $derived(toolInput.input.file_path || '');
+	const fileName = $derived(filePath.split(/[/\\]/).pop() || filePath || 'unknown');
+	const oldString = $derived(toolInput.input.old_string || '');
+	const newString = $derived(toolInput.input.new_string || '');
+	const replaceAll = $derived(toolInput.input.replace_all || false);
 
-	const badges = replaceAll ? [{ text: 'Replace All', color: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300' }] : [];
+	const badges = $derived(replaceAll ? [{ text: 'Replace All', color: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300' }] : []);
 </script>
 
 <FileHeader

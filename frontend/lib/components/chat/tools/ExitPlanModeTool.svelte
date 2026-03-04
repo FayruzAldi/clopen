@@ -5,7 +5,7 @@
 
 	const { toolInput }: { toolInput: ExitPlanModeToolInput } = $props();
 
-	const plan = (toolInput.input as any).plan as string || '';
+	const plan = $derived((toolInput.input as any).plan as string || '');
 </script>
 
 <div class="bg-white dark:bg-slate-800 rounded-md border border-slate-200/60 dark:border-slate-700/60 p-3 mb-4">

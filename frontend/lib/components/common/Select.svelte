@@ -22,18 +22,18 @@
 	const baseClasses =
 		'block w-full px-3 py-3 pr-10 border border-slate-300 dark:border-slate-600 rounded-lg transition-colors duration-200 focus:outline-none text-sm font-medium appearance-none cursor-pointer';
 
-	const stateClasses = error
+	const stateClasses = $derived(error
 		? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-200 dark:focus:ring-red-900/20'
-		: 'focus:border-violet-500 focus:ring-2 focus:ring-violet-200 dark:focus:ring-violet-900/20';
+		: 'focus:border-violet-500 focus:ring-2 focus:ring-violet-200 dark:focus:ring-violet-900/20');
 
 	const backgroundClasses =
 		'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100';
 
-	const disabledClasses = disabled 
-		? 'cursor-not-allowed opacity-60' 
-		: '';
+	const disabledClasses = $derived(disabled
+		? 'cursor-not-allowed opacity-60'
+		: '');
 
-	const selectClasses = `${baseClasses} ${stateClasses} ${backgroundClasses} ${disabledClasses} ${className}`;
+	const selectClasses = $derived(`${baseClasses} ${stateClasses} ${backgroundClasses} ${disabledClasses} ${className}`);
 
 	function handleChange(event: Event) {
 		const target = event.target as HTMLSelectElement;

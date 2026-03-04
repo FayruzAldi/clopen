@@ -35,7 +35,7 @@
 		xl: 'text-xl'
 	};
 
-	const spinnerClasses = `animate-spin rounded-full border-2 ${sizeClasses[size]} ${color ? colorClasses[color] : ''} border-t-transparent ${className}`;
+	const spinnerClasses = $derived(`animate-spin rounded-full border-2 ${sizeClasses[size]} ${color ? colorClasses[color] : ''} border-t-transparent ${className}`);
 </script>
 
 <div class="flex flex-col items-center space-y-2" {...props}>

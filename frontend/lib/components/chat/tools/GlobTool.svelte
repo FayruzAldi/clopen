@@ -6,26 +6,26 @@
 
 	const { toolInput }: { toolInput: GlobToolInput } = $props();
 
-	const pattern = toolInput.input.pattern || '';
-	const searchPath = toolInput.input.path || 'current directory';
+	const pattern = $derived(toolInput.input.pattern || '');
+	const searchPath = $derived(toolInput.input.path || 'current directory');
 
 	// Parse the pattern to get a readable description
-	function getPatternDescription(pattern: string): string {
-		if (pattern.includes('**/*.')) {
-			const ext = pattern.split('**/*.')[1];
+	function getPatternDescription(p: string): string {
+		if (p.includes('**/*.')) {
+			const ext = p.split('**/*.')[1];
 			return `all .${ext} files`;
-		} else if (pattern.includes('**/')) {
-			const rest = pattern.split('**/')[1];
+		} else if (p.includes('**/')) {
+			const rest = p.split('**/')[1];
 			return `all ${rest} in subdirectories`;
-		} else if (pattern.includes('*.')) {
-			const ext = pattern.split('*.')[1];
+		} else if (p.includes('*.')) {
+			const ext = p.split('*.')[1];
 			return `.${ext} files`;
 		}
-		return pattern;
+		return p;
 	}
 
-	const patternDescription = getPatternDescription(pattern);
-	const formattedPath = formatPath(searchPath);
+	const patternDescription = $derived(getPatternDescription(pattern));
+	const formattedPath = $derived(formatPath(searchPath));
 </script>
 
 <div class="bg-white dark:bg-slate-800 rounded-md border border-slate-200/60 dark:border-slate-700/60 p-3">

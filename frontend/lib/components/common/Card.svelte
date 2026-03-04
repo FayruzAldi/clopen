@@ -31,11 +31,11 @@
 		lg: 'p-4 md:p-6'
 	};
 
-	const clickableClasses = clickable
+	const clickableClasses = $derived(clickable
 		? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800'
-		: '';
+		: '');
 
-	const cardClasses = `${baseClasses} ${variantClasses[variant]} ${paddingClasses[padding]} ${clickableClasses} ${className}`;
+	const cardClasses = $derived(`${baseClasses} ${variantClasses[variant]} ${paddingClasses[padding]} ${clickableClasses} ${className}`);
 
 	function handleClick() {
 		if (clickable && onclick) {

@@ -5,12 +5,12 @@
 
 	const { toolInput }: { toolInput: NotebookEditToolInput } = $props();
 	
-	const notebookPath = toolInput.input.notebook_path;
-	const fileName = notebookPath.split(/[/\\]/).pop() || notebookPath;
-	const cellId = toolInput.input.cell_id;
-	const cellType = toolInput.input.cell_type || 'code';
-	const editMode = toolInput.input.edit_mode || 'replace';
-	const newSource = toolInput.input.new_source;
+	const notebookPath = $derived(toolInput.input.notebook_path);
+	const fileName = $derived(notebookPath.split(/[/\\]/).pop() || notebookPath);
+	const cellId = $derived(toolInput.input.cell_id);
+	const cellType = $derived(toolInput.input.cell_type || 'code');
+	const editMode = $derived(toolInput.input.edit_mode || 'replace');
+	const newSource = $derived(toolInput.input.new_source);
 </script>
 
 <FileHeader filePath={notebookPath} fileName={fileName} />

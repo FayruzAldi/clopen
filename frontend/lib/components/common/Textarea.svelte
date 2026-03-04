@@ -23,9 +23,9 @@
 	const baseClasses =
 		'block w-full px-3 py-3 border border-slate-300 dark:border-slate-600 rounded-lg transition-colors duration-200 focus:outline-none text-sm font-medium';
 
-	const stateClasses = error
+	const stateClasses = $derived(error
 		? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-200 dark:focus:ring-red-900/20'
-		: 'focus:border-violet-500 focus:ring-2 focus:ring-violet-200 dark:focus:ring-violet-900/20';
+		: 'focus:border-violet-500 focus:ring-2 focus:ring-violet-200 dark:focus:ring-violet-900/20');
 
 	const backgroundClasses =
 		'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500';
@@ -37,7 +37,7 @@
 		vertical: 'resize-y'
 	};
 
-	const textareaClasses = `${baseClasses} ${stateClasses} ${backgroundClasses} ${resizeClasses[resize]} ${className}`;
+	const textareaClasses = $derived(`${baseClasses} ${stateClasses} ${backgroundClasses} ${resizeClasses[resize]} ${className}`);
 
 	function handleInput(event: Event) {
 		const target = event.target as HTMLTextAreaElement;

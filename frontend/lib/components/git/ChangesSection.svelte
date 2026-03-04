@@ -20,15 +20,13 @@
 		onResolve?: (path: string) => void;
 	}
 
-	const {
+	let {
 		title, icon, files, section,
-		collapsed = false,
+		collapsed: isCollapsed = $bindable(false),
 		onStage, onUnstage, onDiscard,
 		onStageAll, onUnstageAll, onDiscardAll,
 		onViewDiff, onResolve
 	}: Props = $props();
-
-	let isCollapsed = $state(collapsed);
 </script>
 
 {#if files.length > 0}

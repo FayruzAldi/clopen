@@ -5,9 +5,9 @@
 
 	const { toolInput }: { toolInput: WriteToolInput } = $props();
 
-	const filePath = toolInput.input.file_path || '';
-	const fileName = filePath.split(/[/\\]/).pop() || filePath || 'unknown';
-	const content = toolInput.input.content || '';
+	const filePath = $derived(toolInput.input.file_path || '');
+	const fileName = $derived(filePath.split(/[/\\]/).pop() || filePath || 'unknown');
+	const content = $derived(toolInput.input.content || '');
 </script>
 
 <FileHeader

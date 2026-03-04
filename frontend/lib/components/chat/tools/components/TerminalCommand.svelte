@@ -15,7 +15,7 @@
 		return { mainCommand, args };
 	}
 
-	const { mainCommand, args } = parseCommandParts(command);
+	const parsedCommand = $derived(parseCommandParts(command));
 </script>
 
 <!-- Description (if provided) -->
@@ -38,15 +38,15 @@
 			</div>
 		{/if}
 	</div>
-	
+
 	<!-- Terminal-style command display -->
 	<div class="bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800/60 rounded-md p-2.5 font-mono text-sm">
 		<div class="flex items-start gap-2">
 			<span class="text-green-600 dark:text-green-400 select-none">$</span>
 			<div class="flex-1 text-slate-900 dark:text-slate-200 break-all">
-				<span class="text-violet-600 dark:text-violet-300 font-medium">{mainCommand}</span>
-				{#if args.length > 0}
-					<span class="text-slate-700 dark:text-slate-300"> {args.join(' ')}</span>
+				<span class="text-violet-600 dark:text-violet-300 font-medium">{parsedCommand.mainCommand}</span>
+				{#if parsedCommand.args.length > 0}
+					<span class="text-slate-700 dark:text-slate-300"> {parsedCommand.args.join(' ')}</span>
 				{/if}
 			</div>
 		</div>
