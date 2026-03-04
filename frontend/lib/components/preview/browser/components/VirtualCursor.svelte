@@ -7,8 +7,8 @@
 <!-- Virtual Cursor for Autonomous Testing -->
 {#if cursor.visible}
 	<div 
-		class="fixed pointer-events-none z-50 transition-all duration-100"
-		style="left: {cursor.x - 4}px; top: {cursor.y - 2}px;"
+		class="fixed pointer-events-none z-50 transition-all duration-100 ease-out"
+		style="left: {cursor.x}px; top: {cursor.y}px; margin-left: -4.167px; margin-top: -2.5px;"
 	>
 		<!-- Cursor body with fixed size -->
 		<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" 
