@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { themeStore, toggleDarkMode } from '$frontend/lib/stores/ui/theme.svelte';
 	import Icon from '../../common/Icon.svelte';
-	import LayoutPresetSettings from './LayoutPresetSettings.svelte';
 </script>
 
 <div class="py-1">
@@ -43,9 +42,4 @@
 			</label>
 		</div>
 	</div>
-</div>
-
-<!-- Layout Presets -->
-<div class="mt-6">
-	<LayoutPresetSettings />
 </div>

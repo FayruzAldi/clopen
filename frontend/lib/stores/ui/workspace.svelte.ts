@@ -4,6 +4,7 @@
  */
 
 import { debug } from '$shared/utils/logger';
+import type { IconName } from '$shared/types/ui/icons';
 
 // ============================================
 // TYPE DEFINITIONS
@@ -146,146 +147,181 @@ export function updateSplitRatio(node: SplitNode, path: number[], newRatio: numb
 	return { ...node, children: newChildren };
 }
 
+/**
+ * Swap two panels' positions in the tree
+ */
+function swapPanelsInTree(node: SplitNode, panelA: PanelId, panelB: PanelId): SplitNode {
+	if (node.type === 'panel') {
+		if (node.panelId === panelA) return createPanel(panelB);
+		if (node.panelId === panelB) return createPanel(panelA);
+		return node;
+	}
+
+	return {
+		...node,
+		children: [
+			swapPanelsInTree(node.children[0], panelA, panelB),
+			swapPanelsInTree(node.children[1], panelA, panelB)
+		] as [SplitNode, SplitNode]
+	};
+}
+
+/**
+ * Split a panel leaf into a split container with the original panel + new panel
+ */
+function splitPanelInTree(
+	node: SplitNode,
+	targetPanelId: PanelId,
+	direction: SplitDirection,
+	newPanelId: PanelId | null
+): SplitNode {
+	if (node.type === 'panel') {
+		if (node.panelId === targetPanelId) {
+			return createSplit(direction, 50, createPanel(targetPanelId), createPanel(newPanelId));
+		}
+		return node;
+	}
+
+	return {
+		...node,
+		children: [
+			splitPanelInTree(node.children[0], targetPanelId, direction, newPanelId),
+			splitPanelInTree(node.children[1], targetPanelId, direction, newPanelId)
+		] as [SplitNode, SplitNode]
+	};
+}
+
+/**
+ * Remove a panel from the tree and collapse its parent split.
+ * Returns null if the node itself is the target panel (root-level).
+ */
+function removePanelFromTree(node: SplitNode, panelId: PanelId): SplitNode | null {
+	if (node.type === 'panel') {
+		return node.panelId === panelId ? null : node;
+	}
+
+	const [child1, child2] = node.children;
+
+	const newChild1 = removePanelFromTree(child1, panelId);
+	if (newChild1 === null) return child2;
+
+	const newChild2 = removePanelFromTree(child2, panelId);
+	if (newChild2 === null) return child1;
+
+	if (newChild1 !== child1 || newChild2 !== child2) {
+		return { ...node, children: [newChild1, newChild2] as [SplitNode, SplitNode] };
+	}
+
+	return node;
+}
+
+/**
+ * Replace a node at a specific path in the tree
+ */
+function setNodeAtPath(root: SplitNode, path: number[], replacement: SplitNode): SplitNode {
+	if (path.length === 0) return replacement;
+	if (root.type === 'panel') return root;
+
+	const [nextIndex, ...restPath] = path;
+	const newChildren = [...root.children] as [SplitNode, SplitNode];
+	newChildren[nextIndex] = setNodeAtPath(newChildren[nextIndex], restPath, replacement);
+	return { ...root, children: newChildren };
+}
+
+/**
+ * Remove all empty (null) leaf nodes and collapse their parent splits
+ */
+function cleanupEmptyNodes(node: SplitNode): SplitNode | null {
+	if (node.type === 'panel') {
+		return node.panelId ? node : null;
+	}
+
+	const child1 = cleanupEmptyNodes(node.children[0]);
+	const child2 = cleanupEmptyNodes(node.children[1]);
+
+	if (!child1 && !child2) return null;
+	if (!child1) return child2;
+	if (!child2) return child1;
+
+	if (child1 !== node.children[0] || child2 !== node.children[1]) {
+		return { ...node, children: [child1, child2] as [SplitNode, SplitNode] };
+	}
+
+	return node;
+}
+
+/**
+ * Get a node at a specific path in the tree
+ */
+function getNodeAtPath(root: SplitNode, path: number[]): SplitNode | null {
+	if (path.length === 0) return root;
+	if (root.type === 'panel') return null;
+
+	const [nextIndex, ...restPath] = path;
+	return getNodeAtPath(root.children[nextIndex], restPath);
+}
+
+/**
+ * Count total leaf nodes in the tree (including empty slots)
+ */
+function countLeafNodes(node: SplitNode): number {
+	if (node.type === 'panel') return 1;
+	return countLeafNodes(node.children[0]) + countLeafNodes(node.children[1]);
+}
+
 // ============================================
 // BUILT-IN PRESETS
 // ============================================
 
 export const builtInPresets: LayoutPreset[] = [
 	// ============================================
-	// A. SINGLE PANEL FOCUS (5 presets)
+	// A. SINGLE PANEL (1 preset)
 	// ============================================
 	{
-		id: 'focus-chat',
-		name: 'Focus Chat',
-		description: 'Chat only, full screen',
-		icon: 'lucide:message-square',
+		id: 'focus',
+		name: 'Focus',
+		description: 'Single full panel',
+		icon: 'lucide:maximize-2',
 		layout: createPanel('chat'),
-		isCustom: false
-	},
-	{
-		id: 'focus-files',
-		name: 'Focus Files',
-		description: 'File explorer fullscreen',
-		icon: 'lucide:folder-open',
-		layout: createPanel('files'),
-		isCustom: false
-	},
-	{
-		id: 'focus-preview',
-		name: 'Focus Preview',
-		description: 'Preview fullscreen',
-		icon: 'lucide:monitor',
-		layout: createPanel('preview'),
-		isCustom: false
-	},
-	{
-		id: 'focus-terminal',
-		name: 'Focus Terminal',
-		description: 'Terminal fullscreen',
-		icon: 'lucide:terminal-square',
-		layout: createPanel('terminal'),
-		isCustom: false
-	},
-	{
-		id: 'focus-git',
-		name: 'Focus Git',
-		description: 'Source control fullscreen',
-		icon: 'lucide:git-branch',
-		layout: createPanel('git'),
 		isCustom: false
 	},
 
 	// ============================================
-	// B. TWO PANEL LAYOUTS (6 presets)
+	// B. TWO PANELS (3 presets)
 	// ============================================
 	{
-		id: 'chat-files',
-		name: 'Chat + Files',
-		description: '50/50 vertical split',
-		icon: 'lucide:layout-panel-left',
+		id: 'side-by-side',
+		name: 'Dual Columns',
+		description: 'Two equal columns',
+		icon: 'lucide:columns-2',
 		layout: createSplit('vertical', 50, createPanel('chat'), createPanel('files')),
 		isCustom: false
 	},
 	{
-		id: 'chat-preview',
-		name: 'Chat + Preview',
-		description: 'Live preview development',
-		icon: 'lucide:app-window',
-		layout: createSplit('vertical', 50, createPanel('chat'), createPanel('preview')),
+		id: 'top-bottom',
+		name: 'Dual Rows',
+		description: 'Two equal rows',
+		icon: 'lucide:rows-2',
+		layout: createSplit('horizontal', 50, createPanel('files'), createPanel('terminal')),
 		isCustom: false
 	},
 	{
-		id: 'chat-terminal',
-		name: 'Chat + Terminal',
-		description: 'Backend/CLI development',
-		icon: 'lucide:square-terminal',
-		layout: createSplit('vertical', 50, createPanel('chat'), createPanel('terminal')),
-		isCustom: false
-	},
-	{
-		id: 'files-preview',
-		name: 'Files + Preview',
-		description: 'Manual coding workflow',
+		id: 'sidebar-main',
+		name: 'Sidebar',
+		description: 'Narrow left, wide right',
 		icon: 'lucide:panel-left',
-		layout: createSplit('vertical', 50, createPanel('files'), createPanel('preview')),
-		isCustom: false
-	},
-	{
-		id: 'files-terminal',
-		name: 'Files + Terminal',
-		description: 'File management + execution',
-		icon: 'lucide:folder-tree',
-		layout: createSplit('vertical', 50, createPanel('files'), createPanel('terminal')),
-		isCustom: false
-	},
-	{
-		id: 'preview-terminal',
-		name: 'Preview + Terminal',
-		description: 'Frontend testing',
-		icon: 'lucide:layout-panel-top',
-		layout: createSplit('horizontal', 50, createPanel('preview'), createPanel('terminal')),
-		isCustom: false
-	},
-	{
-		id: 'chat-git',
-		name: 'Chat + Git',
-		description: 'AI-assisted source control',
-		icon: 'lucide:git-merge',
-		layout: createSplit('vertical', 50, createPanel('chat'), createPanel('git')),
-		isCustom: false
-	},
-	{
-		id: 'files-git',
-		name: 'Files + Git',
-		description: 'File editing + source control',
-		icon: 'lucide:git-compare',
-		layout: createSplit('vertical', 50, createPanel('files'), createPanel('git')),
+		layout: createSplit('vertical', 25, createPanel('files'), createPanel('chat')),
 		isCustom: false
 	},
 
 	// ============================================
-	// C. THREE PANEL LAYOUTS (8 presets)
+	// C. THREE PANELS (4 presets)
 	// ============================================
 	{
-		id: 'code-review',
-		name: 'Code Review',
-		description: 'Chat + Files + Git',
-		icon: 'lucide:git-pull-request',
-		// Layout: [Chat (33%) | Files/Git (67%)]
-		layout: createSplit(
-			'vertical',
-			33,
-			createPanel('chat'),
-			createSplit('horizontal', 50, createPanel('files'), createPanel('git'))
-		),
-		isCustom: false
-	},
-	{
-		id: 'frontend-dev',
-		name: 'Frontend Dev',
-		description: 'Chat | Files | Preview (3 columns)',
-		icon: 'lucide:layout-template',
-		// Layout: [Chat (33%) | Files (33%) | Preview (34%)]
+		id: 'three-columns',
+		name: 'Three Columns',
+		description: 'Three equal columns',
+		icon: 'lucide:columns-3',
 		layout: createSplit(
 			'vertical',
 			33,
@@ -295,81 +331,10 @@ export const builtInPresets: LayoutPreset[] = [
 		isCustom: false
 	},
 	{
-		id: 'backend-dev',
-		name: 'Backend Dev',
-		description: 'Chat | Files | Terminal (3 columns)',
-		icon: 'lucide:server',
-		// Layout: [Chat (33%) | Files (33%) | Terminal (34%)]
-		layout: createSplit(
-			'vertical',
-			33,
-			createPanel('chat'),
-			createSplit('vertical', 50, createPanel('files'), createPanel('terminal'))
-		),
-		isCustom: false
-	},
-	{
-		id: 'writing-mode',
-		name: 'Writing Mode',
-		description: 'Chat | Preview | Files',
-		icon: 'lucide:file-edit',
-		// Layout: [Chat (40%) | Preview (40%) | Files (20%)]
-		layout: createSplit(
-			'vertical',
-			40,
-			createPanel('chat'),
-			createSplit('vertical', 66.7, createPanel('preview'), createPanel('files'))
-		),
-		isCustom: false
-	},
-	{
-		id: 'testing-mode',
-		name: 'Testing Mode',
-		description: 'Files | Preview | Terminal (stacked)',
-		icon: 'lucide:flask-conical',
-		// Layout: [Files (top 33%) | Preview (33%) | Terminal (34%)]
-		layout: createSplit(
-			'horizontal',
-			33,
-			createPanel('files'),
-			createSplit('horizontal', 50, createPanel('preview'), createPanel('terminal'))
-		),
-		isCustom: false
-	},
-	{
-		id: 'fullstack-lite',
-		name: 'Full Stack Lite',
-		description: 'Chat (top) | Files + Preview (bottom)',
-		icon: 'lucide:layers',
-		// Layout: [Chat (top 50%) | Files/Preview (bottom 50%)]
-		layout: createSplit(
-			'horizontal',
-			50,
-			createPanel('chat'),
-			createSplit('vertical', 50, createPanel('files'), createPanel('preview'))
-		),
-		isCustom: false
-	},
-	{
-		id: 'devops-mode',
-		name: 'DevOps Mode',
-		description: 'Terminal (big) | Chat + Files (side)',
-		icon: 'lucide:workflow',
-		// Layout: [Terminal (70%) | Chat/Files (30%)]
-		layout: createSplit(
-			'vertical',
-			70,
-			createPanel('terminal'),
-			createSplit('horizontal', 50, createPanel('chat'), createPanel('files'))
-		),
-		isCustom: false
-	},
-	{
-		id: 'learning-mode',
-		name: 'Learning Mode',
-		description: 'Chat (big left) | Files + Preview (right)',
-		icon: 'lucide:graduation-cap',
-		// Layout: [Chat (50%) | Files/Preview (50%)]
+		id: 'main-stack',
+		name: 'Main Stack',
+		description: 'Left column, stacked right',
+		icon: 'lucide:layout-panel-left',
 		layout: createSplit(
 			'vertical',
 			50,
@@ -379,29 +344,53 @@ export const builtInPresets: LayoutPreset[] = [
 		isCustom: false
 	},
 	{
-		id: 'git-workflow',
-		name: 'Git Workflow',
-		description: 'Git + Files + Terminal',
-		icon: 'lucide:git-fork',
-		// Layout: [Git (33%) | Files/Terminal (67%)]
+		id: 'top-split',
+		name: 'Top Split',
+		description: 'Top row, two bottom columns',
+		icon: 'lucide:layout-panel-top',
+		layout: createSplit(
+			'horizontal',
+			50,
+			createPanel('files'),
+			createSplit('vertical', 50, createPanel('chat'), createPanel('preview'))
+		),
+		isCustom: false
+	},
+	{
+		id: 'sidebar-stack',
+		name: 'Side Stack',
+		description: 'Narrow left, two stacked right',
+		icon: 'lucide:panel-left-close',
 		layout: createSplit(
 			'vertical',
-			33,
-			createPanel('git'),
-			createSplit('horizontal', 50, createPanel('files'), createPanel('terminal'))
+			25,
+			createPanel('chat'),
+			createSplit('horizontal', 50, createPanel('files'), createPanel('preview'))
 		),
 		isCustom: false
 	},
 
 	// ============================================
-	// D. FOUR PANEL LAYOUTS (4 presets)
+	// D. FOUR PANELS (3 presets)
 	// ============================================
 	{
-		id: 'full-dev',
-		name: 'Full Development',
-		description: 'All panels in optimal layout',
+		id: 'quad-grid',
+		name: 'Quad Grid',
+		description: '2x2 grid layout',
+		icon: 'lucide:grid-2x2',
+		layout: createSplit(
+			'horizontal',
+			50,
+			createSplit('vertical', 50, createPanel('chat'), createPanel('files')),
+			createSplit('vertical', 50, createPanel('preview'), createPanel('terminal'))
+		),
+		isCustom: false
+	},
+	{
+		id: 'main-triple',
+		name: 'Main Triple',
+		description: 'Left column, three right panels',
 		icon: 'lucide:layout-dashboard',
-		// Layout: [Chat (33%) | Files (67%) / (Preview (50%) | Terminal (50%))]
 		layout: createSplit(
 			'vertical',
 			33,
@@ -416,51 +405,17 @@ export const builtInPresets: LayoutPreset[] = [
 		isCustom: false
 	},
 	{
-		id: 'debug-mode',
-		name: 'Debug Mode',
-		description: 'Chat + Files/Preview + Terminal',
-		icon: 'lucide:bug',
-		// Layout: [Chat (35%) | Files/Preview (35%) | Terminal (30%)]
-		layout: createSplit(
-			'vertical',
-			35,
-			createPanel('chat'),
-			createSplit(
-				'vertical',
-				53.8, // 35 / (35 + 30) * 100 ≈ 53.8%
-				createSplit('horizontal', 60, createPanel('files'), createPanel('preview')),
-				createPanel('terminal')
-			)
-		),
-		isCustom: false
-	},
-	{
-		id: 'quad-grid',
-		name: 'Quad Grid',
-		description: '2x2 grid (25% each)',
-		icon: 'lucide:grid-2x2',
-		// Layout: [Chat/Files (top) | Preview/Terminal (bottom)]
-		layout: createSplit(
-			'horizontal',
-			50,
-			createSplit('vertical', 50, createPanel('chat'), createPanel('files')),
-			createSplit('vertical', 50, createPanel('preview'), createPanel('terminal'))
-		),
-		isCustom: false
-	},
-	{
-		id: 'ide-classic',
-		name: 'IDE Classic',
-		description: 'Files (left narrow) | Chat/Preview/Terminal (right)',
-		icon: 'lucide:panel-right',
-		// Layout: [Files (20%) | Chat/Preview/Terminal (80%)]
+		id: 'sidebar-main-stack',
+		name: 'Classic IDE',
+		description: 'Three columns, right stacked',
+		icon: 'lucide:layout-template',
 		layout: createSplit(
 			'vertical',
 			20,
 			createPanel('files'),
 			createSplit(
-				'horizontal',
-				33,
+				'vertical',
+				62.5, // 50 / (50 + 30) = 62.5%
 				createPanel('chat'),
 				createSplit('horizontal', 50, createPanel('preview'), createPanel('terminal'))
 			)
@@ -469,14 +424,13 @@ export const builtInPresets: LayoutPreset[] = [
 	},
 
 	// ============================================
-	// E. FIVE PANEL LAYOUTS (2 presets)
+	// E. FIVE PANELS (1 preset)
 	// ============================================
 	{
-		id: 'full-dev-git',
-		name: 'Full Dev + Git',
-		description: 'All panels with source control',
-		icon: 'lucide:layout-dashboard',
-		// Layout: [Chat (25%) | Files/Git (top 50%) | Preview/Terminal (bottom 25%)]
+		id: 'full-grid',
+		name: 'Full Grid',
+		description: 'Left column, 2x2 right',
+		icon: 'lucide:layout-grid',
 		layout: createSplit(
 			'vertical',
 			25,
@@ -489,26 +443,7 @@ export const builtInPresets: LayoutPreset[] = [
 			)
 		),
 		isCustom: false
-	},
-	{
-		id: 'ide-git',
-		name: 'IDE + Git',
-		description: 'Classic IDE with source control',
-		icon: 'lucide:git-branch',
-		// Layout: [Git (20%) | Chat (top 50%) | Files/Terminal (bottom 50%)]
-		layout: createSplit(
-			'vertical',
-			20,
-			createPanel('git'),
-			createSplit(
-				'horizontal',
-				50,
-				createPanel('chat'),
-				createSplit('vertical', 50, createPanel('files'), createPanel('terminal'))
-			)
-		),
-		isCustom: false
-	},
+	}
 ];
 
 // ============================================
@@ -558,8 +493,16 @@ const defaultPanels: Record<PanelId, PanelConfig> = {
 	}
 };
 
-// Default: Full Development layout
-const defaultFullDevPreset = builtInPresets.find((p) => p.id === 'full-dev')!;
+export const PANEL_OPTIONS: { id: PanelId; title: string; icon: IconName }[] = [
+	{ id: 'chat', title: 'AI Assistant', icon: 'lucide:bot' },
+	{ id: 'files', title: 'Files', icon: 'lucide:folder' },
+	{ id: 'preview', title: 'Preview', icon: 'lucide:globe' },
+	{ id: 'terminal', title: 'Terminal', icon: 'lucide:terminal' },
+	{ id: 'git', title: 'Source Control', icon: 'lucide:git-branch' }
+];
+
+// Default: Main + Stack layout
+const defaultPreset = builtInPresets.find((p) => p.id === 'main-stack')!;
 
 // ============================================
 // CORE STATE
@@ -567,8 +510,8 @@ const defaultFullDevPreset = builtInPresets.find((p) => p.id === 'full-dev')!;
 
 export const workspaceState = $state<WorkspaceState>({
 	panels: { ...defaultPanels },
-	layout: defaultFullDevPreset.layout,
-	activePresetId: 'full-dev',
+	layout: defaultPreset.layout,
+	activePresetId: 'main-stack',
 	navigatorCollapsed: false,
 	navigatorWidth: 220,
 	activeMobilePanel: 'chat'
@@ -634,6 +577,127 @@ export function setSplitRatio(path: number[], ratio: number): void {
 }
 
 // ============================================
+// PANEL MANIPULATION
+// ============================================
+
+/**
+ * Swap a panel's content with another panel type.
+ * If the new panel is already visible, swap their positions.
+ */
+export function swapPanel(currentPanelId: PanelId, newPanelId: PanelId): void {
+	if (currentPanelId === newPanelId) return;
+
+	const visiblePanels = getVisiblePanels(workspaceState.layout);
+
+	if (visiblePanels.includes(newPanelId)) {
+		workspaceState.layout = swapPanelsInTree(workspaceState.layout, currentPanelId, newPanelId);
+	} else {
+		workspaceState.layout = updatePanelInTree(workspaceState.layout, currentPanelId, newPanelId);
+	}
+
+	workspaceState.activePresetId = undefined;
+	saveWorkspaceState();
+	debug.log('workspace', `Swapped panel ${currentPanelId} → ${newPanelId}`);
+}
+
+/**
+ * Split a panel into two, with the original panel on the first side
+ * and a new panel (or empty slot) on the second side.
+ */
+export function splitPanel(
+	panelId: PanelId,
+	direction: SplitDirection,
+	newPanelId: PanelId | null = null
+): void {
+	workspaceState.layout = splitPanelInTree(workspaceState.layout, panelId, direction, newPanelId);
+	workspaceState.activePresetId = undefined;
+	saveWorkspaceState();
+	debug.log('workspace', `Split panel ${panelId} ${direction} with ${newPanelId ?? 'empty'}`);
+}
+
+/**
+ * Close a panel and collapse its parent split.
+ * Returns false if the panel is the last one (minimum 1 panel required).
+ */
+export function closePanel(panelId: PanelId): boolean {
+	const visiblePanels = getVisiblePanels(workspaceState.layout);
+	if (visiblePanels.length <= 1) {
+		debug.log('workspace', 'Cannot close last panel');
+		return false;
+	}
+
+	const result = removePanelFromTree(workspaceState.layout, panelId);
+	if (result) {
+		workspaceState.layout = result;
+		workspaceState.activePresetId = undefined;
+		saveWorkspaceState();
+		debug.log('workspace', `Closed panel ${panelId}`);
+		return true;
+	}
+	return false;
+}
+
+/**
+ * Check if a panel can be closed (more than 1 panel visible)
+ */
+export function canClosePanel(): boolean {
+	return getVisiblePanels(workspaceState.layout).length > 1;
+}
+
+/**
+ * Set the panel type at a specific path (used for empty slot panel picker).
+ * If the panel is already visible elsewhere, it gets moved here
+ * and the old position is cleaned up.
+ */
+export function setPanelAtPath(path: number[], panelId: PanelId): void {
+	let layout = workspaceState.layout;
+	const visiblePanels = getVisiblePanels(layout);
+
+	if (visiblePanels.includes(panelId)) {
+		// Panel already visible — move it here, clean up old position
+		layout = updatePanelInTree(layout, panelId, null);
+		layout = setNodeAtPath(layout, path, createPanel(panelId));
+		const cleaned = cleanupEmptyNodes(layout);
+		if (cleaned) layout = cleaned;
+	} else {
+		layout = setNodeAtPath(layout, path, createPanel(panelId));
+	}
+
+	workspaceState.layout = layout;
+	workspaceState.activePresetId = undefined;
+	saveWorkspaceState();
+	debug.log('workspace', `Set panel at path ${path.join('.')} to ${panelId}`);
+}
+
+/**
+ * Close a panel at a specific path by collapsing its parent split.
+ * The sibling takes the parent's place. Used for empty slot cancel.
+ */
+export function closePanelAtPath(path: number[]): boolean {
+	if (path.length === 0) {
+		// Root node — can't close the only thing in the layout
+		return false;
+	}
+
+	const totalLeaves = countLeafNodes(workspaceState.layout);
+	if (totalLeaves <= 1) return false;
+
+	const parentPath = path.slice(0, -1);
+	const childIndex = path[path.length - 1];
+	const siblingIndex = childIndex === 0 ? 1 : 0;
+
+	const parentNode = getNodeAtPath(workspaceState.layout, parentPath);
+	if (!parentNode || parentNode.type !== 'split') return false;
+
+	const sibling = parentNode.children[siblingIndex];
+	workspaceState.layout = setNodeAtPath(workspaceState.layout, parentPath, sibling);
+	workspaceState.activePresetId = undefined;
+	saveWorkspaceState();
+	debug.log('workspace', `Closed panel at path ${path.join('.')}`);
+	return true;
+}
+
+// ============================================
 // LAYOUT PRESETS
 // ============================================
 
@@ -655,29 +719,8 @@ export function applyLayoutPreset(preset: LayoutPreset): void {
 }
 
 export function resetToDefault(): void {
-	applyLayoutPreset(defaultFullDevPreset);
-	debug.log('workspace', 'Reset to default layout (Full Development)');
-}
-
-// Shortcuts for built-in presets
-export function applyFocusChatLayout(): void {
-	const preset = builtInPresets.find((p) => p.id === 'focus-chat')!;
-	applyLayoutPreset(preset);
-}
-
-export function applyCodeReviewLayout(): void {
-	const preset = builtInPresets.find((p) => p.id === 'code-review')!;
-	applyLayoutPreset(preset);
-}
-
-export function applyFullDevLayout(): void {
-	const preset = builtInPresets.find((p) => p.id === 'full-dev')!;
-	applyLayoutPreset(preset);
-}
-
-export function applyDebugLayout(): void {
-	const preset = builtInPresets.find((p) => p.id === 'debug-mode')!;
-	applyLayoutPreset(preset);
+	applyLayoutPreset(defaultPreset);
+	debug.log('workspace', 'Reset to default layout (Main + Stack)');
 }
 
 // ============================================

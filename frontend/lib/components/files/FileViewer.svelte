@@ -439,7 +439,7 @@
 				<!-- External change badge + refresh button -->
 				{#if externallyChanged && onForceReload}
 					<div class="flex items-center gap-1 mr-1">
-						<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 font-medium whitespace-nowrap">
+						<span class="text-3xs px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 font-medium whitespace-nowrap">
 							Changed externally
 						</span>
 						<button

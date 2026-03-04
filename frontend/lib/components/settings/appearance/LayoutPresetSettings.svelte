@@ -8,34 +8,34 @@
 	// Group presets by category
 	const presetCategories = [
 		{
-			name: 'Single Panel Focus',
-			description: 'Full screen layouts for maximum focus',
+			name: 'Single Panel',
+			description: 'Full screen focus mode',
 			icon: 'lucide:maximize-2',
-			presets: builtInPresets.slice(0, 5)
+			presets: builtInPresets.slice(0, 1)
 		},
 		{
-			name: 'Two Panel Layouts',
-			description: 'Dual focus workflows',
+			name: 'Two Panels',
+			description: 'Dual panel layouts',
 			icon: 'lucide:columns-2',
-			presets: builtInPresets.slice(5, 13)
+			presets: builtInPresets.slice(1, 4)
 		},
 		{
-			name: 'Three Panel Layouts',
-			description: 'Balanced multi-panel setups',
+			name: 'Three Panels',
+			description: 'Multi-panel arrangements',
 			icon: 'lucide:columns-3',
-			presets: builtInPresets.slice(13, 22)
+			presets: builtInPresets.slice(4, 8)
 		},
 		{
-			name: 'Four Panel Layouts',
-			description: 'All panels visible',
+			name: 'Four Panels',
+			description: 'Complex grid layouts',
 			icon: 'lucide:layout-grid',
-			presets: builtInPresets.slice(22, 26)
+			presets: builtInPresets.slice(8, 11)
 		},
 		{
-			name: 'Five Panel Layouts',
-			description: 'Full workspace with source control',
+			name: 'Five Panels',
+			description: 'Full workspace grid',
 			icon: 'lucide:layout-dashboard',
-			presets: builtInPresets.slice(26, 28)
+			presets: builtInPresets.slice(11, 12)
 		}
 	];
 

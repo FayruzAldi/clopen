@@ -7,9 +7,18 @@
 	import { projectState } from '$frontend/lib/stores/core/projects.svelte';
 	import { presenceState } from '$frontend/lib/stores/core/presence.svelte';
 	import { userStore } from '$frontend/lib/stores/features/user.svelte';
-	import { workspaceState, type PanelId } from '$frontend/lib/stores/ui/workspace.svelte';
+	import {
+		workspaceState,
+		type PanelId,
+		swapPanel,
+		splitPanel,
+		closePanel,
+		canClosePanel,
+		PANEL_OPTIONS
+	} from '$frontend/lib/stores/ui/workspace.svelte';
 	import type { IconName } from '$shared/types/ui/icons';
 	import type { DeviceSize } from '$frontend/lib/constants/preview';
+
 	import { DEVICE_VIEWPORTS } from '$frontend/lib/constants/preview';
 
 	interface Props {
@@ -72,6 +81,33 @@
 		}
 	});
 
+	// Panel actions menu state
+	let showActionsMenu = $state(false);
+
+	function toggleActionsMenu(e: MouseEvent) {
+		e.stopPropagation();
+		showActionsMenu = !showActionsMenu;
+	}
+
+	function closeActionsMenu() {
+		showActionsMenu = false;
+	}
+
+	function handleSwap(newPanelId: PanelId) {
+		swapPanel(panelId, newPanelId);
+		closeActionsMenu();
+	}
+
+	function handleSplit(direction: 'vertical' | 'horizontal') {
+		splitPanel(panelId, direction);
+		closeActionsMenu();
+	}
+
+	function handleClose() {
+		closePanel(panelId);
+		closeActionsMenu();
+	}
+
 	// Preview panel device dropdown state
 	let showDeviceDropdown = $state(false);
 
@@ -116,9 +152,83 @@
 		? 'h-11 pb-2 px-4 bg-white/90 dark:bg-slate-900/98 border-b border-slate-200 dark:border-slate-800'
 		: 'py-2.5 px-3.5 bg-slate-100 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800'}"
 >
-	<div class="flex items-center gap-2.5 text-sm font-medium text-slate-900 dark:text-slate-100">
+	<div class="flex items-center text-sm font-medium text-slate-900 dark:text-slate-100">
+		<!-- Panel layout actions (⋮ menu) -->
+		{#if !isMobile}
+			<div class="relative -ml-0.5 mr-2 border-slate-200 dark:border-slate-700">
+				<button
+					type="button"
+					class="flex items-center justify-center w-6 h-6 bg-transparent border-none rounded-md text-slate-400 cursor-pointer transition-all duration-150 hover:bg-violet-500/10 hover:text-slate-700 dark:hover:text-slate-200"
+					onclick={toggleActionsMenu}
+					title="Panel actions"
+				>
+					<Icon name="lucide:ellipsis-vertical" class="w-3.5 h-3.5" />
+				</button>
+
+				{#if showActionsMenu}
+					<div class="fixed inset-0 z-40" onclick={closeActionsMenu}></div>
+					<div class="absolute top-full left-0 mt-1 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg overflow-hidden min-w-44 py-1">
+						<!-- Switch to section -->
+						<div class="px-3 py-1.5 text-3xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+							Switch to
+						</div>
+						{#each PANEL_OPTIONS as option}
+							<button
+								type="button"
+								class="flex items-center gap-2.5 w-full px-3 py-1.5 text-left text-xs bg-transparent border-none cursor-pointer transition-all duration-150 hover:bg-violet-500/10
+									{option.id === panelId ? 'text-violet-600 dark:text-violet-400 font-medium' : 'text-slate-700 dark:text-slate-300'}"
+								onclick={() => handleSwap(option.id)}
+								disabled={option.id === panelId}
+							>
+								<Icon name={option.icon} class="w-3.5 h-3.5" />
+								<span class="flex-1">{option.title}</span>
+								{#if option.id === panelId}
+									<Icon name="lucide:check" class="w-3 h-3 text-violet-600 dark:text-violet-400" />
+								{/if}
+							</button>
+						{/each}
+
+						<!-- Divider -->
+						<div class="my-1 border-t border-slate-200 dark:border-slate-700"></div>
+
+						<!-- Split actions -->
+						<button
+							type="button"
+							class="flex items-center gap-2.5 w-full px-3 py-1.5 text-left text-xs bg-transparent border-none cursor-pointer transition-all duration-150 hover:bg-violet-500/10 text-slate-700 dark:text-slate-300"
+							onclick={() => handleSplit('vertical')}
+						>
+							<Icon name="lucide:columns-2" class="w-3.5 h-3.5" />
+							<span>Split Right</span>
+						</button>
+						<button
+							type="button"
+							class="flex items-center gap-2.5 w-full px-3 py-1.5 text-left text-xs bg-transparent border-none cursor-pointer transition-all duration-150 hover:bg-violet-500/10 text-slate-700 dark:text-slate-300"
+							onclick={() => handleSplit('horizontal')}
+						>
+							<Icon name="lucide:rows-2" class="w-3.5 h-3.5" />
+							<span>Split Down</span>
+						</button>
+
+						<!-- Divider -->
+						<div class="my-1 border-t border-slate-200 dark:border-slate-700"></div>
+
+						<!-- Close -->
+						<button
+							type="button"
+							class="flex items-center gap-2.5 w-full px-3 py-1.5 text-left text-xs bg-transparent border-none cursor-pointer transition-all duration-150 hover:bg-red-500/10 text-red-600 dark:text-red-400 disabled:opacity-40 disabled:cursor-not-allowed"
+							onclick={handleClose}
+							disabled={!canClosePanel()}
+							title={!canClosePanel() ? 'Cannot close last panel' : 'Close this panel'}
+						>
+							<Icon name="lucide:x" class="w-3.5 h-3.5" />
+							<span>Close Panel</span>
+						</button>
+					</div>
+				{/if}
+			</div>
+		{/if}
 		<Icon name={iconName} class="w-4 h-4 text-violet-600" />
-		<span>{panel?.title ?? 'Panel'}</span>
+		<span class="ml-2.5">{panel?.title ?? 'Panel'}</span>
 	</div>
 
 	<div class="flex items-center">
@@ -443,7 +553,7 @@
 										<Icon name="lucide:globe" class="w-3.5 h-3.5 shrink-0" />
 										<div class="flex-1 min-w-0">
 											<div>{remote.name}</div>
-											<div class="text-[10px] text-slate-400 truncate font-mono">{remote.fetchUrl}</div>
+											<div class="text-3xs text-slate-400 truncate font-mono">{remote.fetchUrl}</div>
 										</div>
 										{#if remote.name === remoteName}
 											<Icon name="lucide:check" class="w-3.5 h-3.5 text-violet-600 shrink-0" />
@@ -501,5 +611,6 @@
 				</button>
 			{/if}
 		</div>
+
 	</div>
 </header>

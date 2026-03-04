@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { fade, scale } from 'svelte/transition';
+	import { scale } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import Icon from '$frontend/lib/components/common/Icon.svelte';
 	import LayoutPreview from '$frontend/lib/components/settings/appearance/LayoutPreview.svelte';
@@ -9,7 +9,6 @@
 		applyLayoutPreset,
 		type LayoutPreset
 	} from '$frontend/lib/stores/ui/workspace.svelte';
-	import { settings } from '$frontend/lib/stores/features/settings.svelte';
 	import { clickOutside } from '$frontend/lib/utils/click-outside';
 	import type { IconName } from '$shared/types/ui/icons';
 
@@ -27,36 +26,29 @@
 	const presetCategories = [
 		{
 			name: 'Single Panel',
-			presets: builtInPresets.slice(0, 5)
+			presets: builtInPresets.slice(0, 1)
 		},
 		{
 			name: 'Two Panels',
-			presets: builtInPresets.slice(5, 13)
+			presets: builtInPresets.slice(1, 4)
 		},
 		{
 			name: 'Three Panels',
-			presets: builtInPresets.slice(13, 22)
+			presets: builtInPresets.slice(4, 8)
 		},
 		{
 			name: 'Four Panels',
-			presets: builtInPresets.slice(22, 26)
+			presets: builtInPresets.slice(8, 11)
 		},
 		{
 			name: 'Five Panels',
-			presets: builtInPresets.slice(26, 28)
+			presets: builtInPresets.slice(11, 12)
 		}
 	];
 
 	// Filter visible presets and categories
 	const visibleCategories = $derived(
-		presetCategories
-			.map((category) => ({
-				...category,
-				presets: category.presets.filter(
-					(preset) => settings.layoutPresetVisibility[preset.id] !== false
-				)
-			}))
-			.filter((category) => category.presets.length > 0)
+		presetCategories.filter((category) => category.presets.length > 0)
 	);
 
 	function toggleMenu() {
@@ -129,19 +121,11 @@
 						{#each category.presets as preset}
 							<button
 								type="button"
-								class="flex items-center p-2.5 bg-transparent border border-slate-200 dark:border-slate-800 rounded-lg text-slate-700 dark:text-slate-300 text-sm text-left cursor-pointer transition-all duration-150 hover:bg-violet-500/10 hover:border-violet-500/20 {workspaceState.activePresetId ===
-								preset.id
-									? 'bg-violet-500/5 border-violet-500/30'
-									: ''}"
+								class="flex items-center p-2.5 bg-transparent border border-slate-200 dark:border-slate-800 rounded-lg text-slate-700 dark:text-slate-300 text-sm text-left cursor-pointer transition-all duration-150 hover:bg-violet-500/10 hover:border-violet-500/20"
 								onclick={() => handleApplyPreset(preset)}
 							>
 								<div class="flex flex-col gap-1 flex-1 min-w-0">
-									<div class="flex justify-between">
-										<span class="font-medium text-xs">{preset.name}</span>
-										{#if workspaceState.activePresetId === preset.id}
-											<Icon name="lucide:check" class="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
-										{/if}
-									</div>
+									<span class="font-medium text-xs">{preset.name}</span>
 									<!-- Visual Preview -->
 									<div class="w-full">
 										<LayoutPreview layout={preset.layout} size="small" />
