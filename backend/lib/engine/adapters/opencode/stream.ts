@@ -37,6 +37,7 @@ import {
 	convertPartialReasoningDelta,
 	convertReasoningStreamStart,
 	convertReasoningStreamStop,
+	convertSubtaskToolUseOnly,
 	getToolInput,
 } from './message-converter';
 import { ensureClient, getClient } from './server';
@@ -236,6 +237,13 @@ export class OpenCodeEngine implements AIEngine {
 			let reasoningStreamActive = false; // Whether reasoning is currently streaming
 			let reasoningText = ''; // Accumulated reasoning text
 
+			// Child session tracking (for Agent tool sub-messages)
+			const childSessionToAgentTool = new Map<string, string>(); // child sessionID → agent tool callID
+			const childAssistantMessages = new Map<string, OCMessage>(); // child msgID → message
+			const childEmittedToolParts = new Set<string>();
+			const childCompletedToolParts = new Set<string>();
+			let lastAgentToolCallId: string | null = null;
+
 			/**
 			 * Flush active reasoning stream: stop reasoning stream, emit final reasoning message.
 			 */
@@ -266,9 +274,10 @@ export class OpenCodeEngine implements AIEngine {
 				yield convertStreamStop(sessionId);
 
 				const parts = messageParts.get(msgId) || [];
-				// Filter out tool parts and reasoning parts already emitted
+				// Filter out tool parts, subtask parts, and reasoning parts already emitted
 				const remainingParts = parts.filter(p => {
 					if (p.type === 'tool') return !emittedToolParts.has(p.id);
+					if (p.type === 'subtask') return !emittedToolParts.has(p.id);
 					if (p.type === 'reasoning') return false; // Already emitted as reasoning message
 					return true;
 				});
@@ -312,6 +321,15 @@ export class OpenCodeEngine implements AIEngine {
 								}
 								currentAssistantId = info.id;
 							}
+
+							// Track child session assistant messages (for Agent tool sub-messages)
+							if (info.role === 'assistant' && info.sessionID !== sessionId && lastAgentToolCallId) {
+								if (!childSessionToAgentTool.has(info.sessionID)) {
+									childSessionToAgentTool.set(info.sessionID, lastAgentToolCallId);
+									debug.log('engine', `[OC] child session detected: ${info.sessionID} → agent tool ${lastAgentToolCallId}`);
+								}
+								childAssistantMessages.set(info.id, info);
+							}
 							break;
 						}
 
@@ -321,8 +339,36 @@ export class OpenCodeEngine implements AIEngine {
 
 							debug.log('engine', `[OC] part.updated: type=${part.type}, partId=${part.id}, msgId=${part.messageID}, session=${part.sessionID === sessionId ? 'match' : 'skip'}`);
 
-							// Only process parts belonging to our session
-							if (part.sessionID !== sessionId) break;
+							// Handle child session parts (sub-agent tool activities)
+							if (part.sessionID !== sessionId) {
+								const agentCallId = childSessionToAgentTool.get(part.sessionID);
+								if (agentCallId && childAssistantMessages.has(part.messageID)) {
+									const childMsg = childAssistantMessages.get(part.messageID)!;
+
+									if (part.type === 'tool') {
+										const childToolPart = part as ToolPart;
+										if (!childEmittedToolParts.has(part.id)) {
+											const resolvedInput = getToolInput(childToolPart);
+											const hasInput = Object.keys(resolvedInput).length > 0
+												|| childToolPart.state.status !== 'pending';
+											if (hasInput) {
+												childEmittedToolParts.add(part.id);
+												yield convertToolUseOnly(childToolPart, childMsg, sessionId, agentCallId);
+												if (childToolPart.state.status === 'completed' || childToolPart.state.status === 'error') {
+													childCompletedToolParts.add(part.id);
+													yield convertToolResultOnly(childToolPart, sessionId, agentCallId);
+												}
+											}
+										} else if (!childCompletedToolParts.has(part.id)) {
+											if (childToolPart.state.status === 'completed' || childToolPart.state.status === 'error') {
+												childCompletedToolParts.add(part.id);
+												yield convertToolResultOnly(childToolPart, sessionId, agentCallId);
+											}
+										}
+									}
+								}
+								break;
+							}
 
 							// Only process parts for tracked assistant messages (skip user message parts)
 							if (!assistantMessages.has(part.messageID)) {
@@ -363,6 +409,11 @@ export class OpenCodeEngine implements AIEngine {
 
 									if (hasInput) {
 										emittedToolParts.add(part.id);
+
+										// Track agent tool callID for child session linking
+										if (toolPart.tool === 'task') {
+											lastAgentToolCallId = toolPart.callID || toolPart.id;
+										}
 
 										yield convertStreamStop(sessionId);
 										yield convertToolUseOnly(toolPart, msg, sessionId);
@@ -412,6 +463,25 @@ export class OpenCodeEngine implements AIEngine {
 								}
 							}
 
+							// Handle subtask parts — convert to Agent tool_use for progressive rendering
+							if (part.type === 'subtask') {
+								const subtaskPart = part as any;
+								const msg = assistantMessages.get(msgId);
+								if (msg && !emittedToolParts.has(part.id)) {
+									emittedToolParts.add(part.id);
+									// Track for child session linking
+									lastAgentToolCallId = part.id;
+									if (reasoningStreamActive) {
+										yield* flushReasoning(msg);
+									}
+									yield convertStreamStop(sessionId);
+									yield convertSubtaskToolUseOnly(subtaskPart, msg, sessionId);
+									yield convertStreamStart(sessionId);
+									streamingText = '';
+								}
+								break;
+							}
+
 							// Skip non-text/non-reasoning parts (step-start, step-finish, etc.)
 							if (part.type !== 'text') {
 								debug.log('engine', `[OC] part.updated: skipped non-text type=${part.type}`);
@@ -455,6 +525,12 @@ export class OpenCodeEngine implements AIEngine {
 						}
 
 						case 'session.idle': {
+							// Only handle idle for our session (sub-agent sessions have different IDs)
+							const idleProps = (event as EventSessionIdle).properties;
+							if (idleProps.sessionID !== sessionId) {
+								debug.log('engine', `[OC] session.idle: ignored (session=${idleProps.sessionID}, ours=${sessionId})`);
+								break;
+							}
 							// Session finished — flush reasoning and emit the last assistant message
 							if (currentAssistantId && !emittedMessageIds.has(currentAssistantId)) {
 								const msg = assistantMessages.get(currentAssistantId);
@@ -468,6 +544,7 @@ export class OpenCodeEngine implements AIEngine {
 									// Filter out tool parts and reasoning parts already emitted
 									const remainingParts = parts.filter(p => {
 										if (p.type === 'tool') return !emittedToolParts.has(p.id);
+										if (p.type === 'subtask') return !emittedToolParts.has(p.id);
 										if (p.type === 'reasoning') return false;
 										return true;
 									});
@@ -495,7 +572,10 @@ export class OpenCodeEngine implements AIEngine {
 						}
 
 						case 'session.status': {
-							const { status } = (event as EventSessionStatus).properties;
+							const statusProps = (event as EventSessionStatus).properties;
+							// Only handle status for our session (sub-agent sessions have different IDs)
+							if (statusProps.sessionID !== sessionId) break;
+							const { status } = statusProps;
 							if (status.type === 'idle') {
 								// Same as session.idle
 								if (currentAssistantId && !emittedMessageIds.has(currentAssistantId)) {
@@ -508,6 +588,7 @@ export class OpenCodeEngine implements AIEngine {
 										const parts = messageParts.get(currentAssistantId) || [];
 										const remainingParts = parts.filter(p => {
 											if (p.type === 'tool') return !emittedToolParts.has(p.id);
+											if (p.type === 'subtask') return !emittedToolParts.has(p.id);
 											if (p.type === 'reasoning') return false;
 											return true;
 										});
@@ -584,7 +665,10 @@ export class OpenCodeEngine implements AIEngine {
 						}
 
 						case 'session.error': {
-							const { error } = (event as EventSessionError).properties;
+							const errorProps = (event as EventSessionError).properties;
+							// Only handle errors for our session (sessionID is optional on errors)
+							if (errorProps.sessionID && errorProps.sessionID !== sessionId) break;
+							const { error } = errorProps;
 							// Extract a human-readable error message.
 							// OpenCode SDK errors follow: { name: string, data: { message, statusCode?, providerID?, responseBody? } }
 							// Don't prepend error class names (e.g. "APIError") — those are SDK

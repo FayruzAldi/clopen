@@ -127,6 +127,8 @@ const TOOL_NAME_MAP: Record<string, string> = {
 	'todo_write': 'TodoWrite',
 	'todowrite': 'TodoWrite',
 	'todoread': 'TodoWrite',
+	// Agent / sub-agent
+	'task': 'Agent',
 	// User interaction
 	'question': 'AskUserQuestion',
 	// Code intelligence & utilities
@@ -385,6 +387,7 @@ interface AssistantMessageParams {
 	sessionId: string;
 	stopReason: string | null;
 	uuid: string;
+	parentToolUseId?: string | null;
 }
 
 /** Build a single SDKAssistantMessage from content blocks */
@@ -402,7 +405,7 @@ function buildAssistantSDKMessage(params: AssistantMessageParams): SDKMessage {
 			...(params.usage && { usage: params.usage }),
 			context_management: null
 		},
-		parent_tool_use_id: null,
+		parent_tool_use_id: params.parentToolUseId ?? null,
 		session_id: params.sessionId,
 		uuid: params.uuid
 	} as unknown as SDKMessage;
@@ -494,6 +497,20 @@ export function convertAssistantMessages(
 			}
 
 			allBlocks.push(block);
+		}
+		else if (part.type === 'subtask') {
+			// Subtask = Agent/sub-agent invocation
+			const subtaskPart = part as any;
+			allBlocks.push({
+				type: 'tool_use',
+				id: subtaskPart.id || crypto.randomUUID(),
+				name: 'Agent',
+				input: {
+					prompt: subtaskPart.prompt || '',
+					description: subtaskPart.description || '',
+					subagent_type: subtaskPart.agent || 'general-purpose',
+				} as NormalizedToolInput,
+			});
 		}
 		// Skip: reasoning, step-start, step-finish, snapshot, patch, agent, retry, compaction
 	}
@@ -682,6 +699,7 @@ export function convertToolUseOnly(
 	toolPart: ToolPart,
 	ocMessage: OCMessage,
 	sessionId: string,
+	parentToolUseId: string | null = null,
 ): SDKMessage {
 	const claudeName = mapToolName(toolPart.tool || 'unknown');
 	const resolvedInput = getToolInput(toolPart);
@@ -703,6 +721,7 @@ export function convertToolUseOnly(
 		sessionId,
 		stopReason: 'tool_use',
 		uuid: crypto.randomUUID(),
+		parentToolUseId,
 	});
 }
 
@@ -784,6 +803,37 @@ export function convertReasoningStreamStop(sessionId: string): EngineSDKMessage 
 }
 
 /**
+ * Convert a subtask part → assistant message with Agent tool_use.
+ * Used for progressive rendering when OpenCode emits subtask parts.
+ */
+export function convertSubtaskToolUseOnly(
+	subtaskPart: { id: string; prompt: string; description: string; agent: string },
+	ocMessage: OCMessage,
+	sessionId: string,
+): SDKMessage {
+	const assistantMsg = ocMessage.role === 'assistant' ? ocMessage as AssistantMessage : null;
+	const modelId = assistantMsg ? `${assistantMsg.providerID}/${assistantMsg.modelID}` : '';
+
+	return buildAssistantSDKMessage({
+		content: [{
+			type: 'tool_use',
+			id: subtaskPart.id || crypto.randomUUID(),
+			name: 'Agent',
+			input: {
+				prompt: subtaskPart.prompt || '',
+				description: subtaskPart.description || '',
+				subagent_type: subtaskPart.agent || 'general-purpose',
+			} as NormalizedToolInput,
+		}],
+		ocMessage,
+		modelId,
+		sessionId,
+		stopReason: 'tool_use',
+		uuid: crypto.randomUUID(),
+	});
+}
+
+/**
  * Convert a completed/errored tool part → user message with tool_result.
  * Sent after the tool finishes executing, matching Claude Code's pattern
  * where tool_result arrives as a separate user message.
@@ -791,6 +841,7 @@ export function convertReasoningStreamStop(sessionId: string): EngineSDKMessage 
 export function convertToolResultOnly(
 	toolPart: ToolPart,
 	sessionId: string,
+	parentToolUseId: string | null = null,
 ): SDKMessage {
 	const toolUseId = toolPart.callID || toolPart.id || crypto.randomUUID();
 
@@ -807,7 +858,7 @@ export function convertToolResultOnly(
 		type: 'user',
 		uuid: crypto.randomUUID(),
 		session_id: sessionId,
-		parent_tool_use_id: null,
+		parent_tool_use_id: parentToolUseId,
 		message: {
 			role: 'user',
 			content: [{
