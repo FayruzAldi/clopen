@@ -125,4 +125,18 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
+## Support
+
+If Clopen is useful to you, consider supporting its development:
+
+| Method | Address / Link |
+|--------|----------------|
+| Bitcoin (BTC) | `bc1qd9fyx4r84cce2a9hkjksetah802knadw5msls3` |
+| Solana (SOL) | `Ev3P4KLF1PNC5C9rZYP8M3DdssyBQAQAiNJkvNmPQPVs` |
+| Ethereum (ERC-20) | `0x61D826e5b666AA5345302EEEd485Acca39b1AFCF` |
+| USDT (TRC-20) | `TLH49i3EoVKhFyLb6u2JUXZWScK7uzksdC` |
+| Saweria | [saweria.co/myrialabs](https://saweria.co/myrialabs) |
+
+---
+
 **Repository:** [github.com/myrialabs/clopen](https://github.com/myrialabs/clopen) · **Issues:** [Report a bug or request a feature](https://github.com/myrialabs/clopen/issues)
