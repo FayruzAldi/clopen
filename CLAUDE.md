@@ -18,13 +18,10 @@ This document provides guidelines for Claude Code when working on the Clopen pro
 - Ensure code matches the established folder structure
 - Use chosen libraries and frameworks
 - Do NOT run `bun run dev` or `bun run build` commands
-- **DO NOT USE** Task Tool for spawning agents
-- **DO NOT USE** Plan Mode (EnterPlanMode)
-- Work directly on requested tasks without creating plans or spawning agents
 
 ### After Coding
 
-- Run `bun run check` command to ensure code functions properly
+- Run `bun run check` and `bun run lint` to ensure code functions properly
 - Do not create any .md files unless explicitly instructed
 
 ---
@@ -62,8 +59,8 @@ This document provides guidelines for Claude Code when working on the Clopen pro
 
 ### Testing
 
-- Run `bun run check` for type checking
-- Ensure all TypeScript checks pass before committing
+- Run `bun run check` for type checking and `bun run lint` for linting
+- Ensure all checks pass before committing
 
 ### Communication
 
@@ -75,8 +72,6 @@ This document provides guidelines for Claude Code when working on the Clopen pro
 
 ## DO NOT
 
-- ❌ Spawn additional Task agents
-- ❌ Enter Plan Mode
 - ❌ Run dev/build commands during development
 - ❌ Create documentation files without request
 - ❌ Proceed without confirmation after each stage
@@ -88,7 +83,7 @@ This document provides guidelines for Claude Code when working on the Clopen pro
 ## DO
 
 - ✅ Follow established patterns
-- ✅ Run `bun run check` after coding
+- ✅ Run `bun run check` and `bun run lint` after coding
 - ✅ Stop and wait for confirmation between stages
 - ✅ Communicate before making significant changes
 - ✅ Use TypeScript throughout

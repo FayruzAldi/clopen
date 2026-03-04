@@ -494,7 +494,7 @@
 								rel="noopener noreferrer"
 								class="inline-flex items-center gap-1 font-medium text-violet-600 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-200 underline underline-offset-2"
 							>
-								official setup guide
+								official documentation
 							</a>
 						</div>
 					</div>
