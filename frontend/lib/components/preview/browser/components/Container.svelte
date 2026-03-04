@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Icon from '$frontend/lib/components/common/Icon.svelte';
 	import Canvas from './Canvas.svelte';
+	import VirtualCursor from './VirtualCursor.svelte';
 	import { scale } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import { onDestroy } from 'svelte';
@@ -23,6 +24,11 @@
 		isStreamReady = $bindable(false), // True when first frame received from WebCodecs
 		errorMessage = $bindable<string | null>(null),
 		virtualCursor = $bindable<{ x: number; y: number; visible: boolean; clicking?: boolean }>({
+			x: 0,
+			y: 0,
+			visible: false
+		}),
+		mcpVirtualCursor = $bindable<{ x: number; y: number; visible: boolean; clicking?: boolean }>({
 			x: 0,
 			y: 0,
 			visible: false
@@ -419,6 +425,7 @@
 					</div> -->
 				</div>
 			{/if}
+
 		</div>
 	{:else}
 		<div
@@ -430,6 +437,16 @@
 			<p class="text-lg font-medium mb-2">Real Browser Preview</p>
 			<p class="text-sm">Enter a URL to preview your web application</p>
 		</div>
+	{/if}
+
+	<!-- Virtual Cursor - User -->
+	{#if !isMcpControlled}
+		<VirtualCursor cursor={virtualCursor} />
+	{/if}
+
+	<!-- MCP Virtual Cursor -->
+	{#if mcpVirtualCursor.visible}
+		<VirtualCursor cursor={mcpVirtualCursor} />
 	{/if}
 </div>
 
