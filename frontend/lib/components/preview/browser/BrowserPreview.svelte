@@ -112,7 +112,7 @@
 			}
 		},
 		onMcpCursorHide: () => {
-			mcpVirtualCursor = { ...mcpVirtualCursor, visible: false };
+			// Cursor stays visible between automated steps until user interacts manually
 		},
 		transformBrowserToDisplayCoordinates: (browserX, browserY) => {
 			return transformBrowserToDisplayCoordinates(browserX, browserY);
@@ -360,44 +360,33 @@
 	function handleCanvasInteraction(action: any) {
 		const tab = activeTab;
 		if (tab && tab.sessionId) {
+			// Hide the AI cursor instantly if the human explicitly interacts
+			mcpVirtualCursor = { ...mcpVirtualCursor, visible: false };	
 			coordinator.sendInteraction(action);
 		}
 	}
 
 	function transformBrowserToDisplayCoordinates(browserX: number, browserY: number): { x: number, y: number } | null {
 		let canvasElement: HTMLCanvasElement | null = null;
-
-		// Try to get canvas element from canvasAPI first (preferred method)
 		if (canvasAPI && canvasAPI.getCanvasElement) {
 			canvasElement = canvasAPI.getCanvasElement();
 		}
-
-		// Fallback: Try to get canvas element directly from DOM if canvasAPI not ready yet
-		// This handles race condition where context menu event arrives before canvasAPI is set
 		if (!canvasElement && typeof document !== 'undefined') {
-			// Canvas is rendered inside Container component
-			const foundCanvas = document.querySelector('canvas[tabindex="0"]') as HTMLCanvasElement;
-			if (foundCanvas) {
-				canvasElement = foundCanvas;
-				debug.log('preview', `Using fallback DOM query to get canvas element`);
-			}
+			canvasElement = document.querySelector('canvas[tabindex="0"]') as HTMLCanvasElement;
 		}
-
-		if (!canvasElement) {
-			debug.warn('preview', `Transform coordinates failed: canvasElement not found (browser: ${browserX}, ${browserY})`);
-			return null;
-		}
+		if (!canvasElement) return null;
 
 		try {
 			const canvasRect = canvasElement.getBoundingClientRect();
+			if (!canvasRect || canvasElement.width === 0 || canvasElement.height === 0) return null;
+			
 			const scaleX = canvasRect.width / canvasElement.width;
 			const scaleY = canvasRect.height / canvasElement.height;
 			const screenX = canvasRect.left + (browserX * scaleX);
 			const screenY = canvasRect.top + (browserY * scaleY);
 
 			return { x: screenX, y: screenY };
-		} catch (error) {
-			debug.error('preview', 'Error transforming coordinates:', error);
+		} catch (e) {
 			return null;
 		}
 	}
@@ -500,6 +489,7 @@
 				bind:isStreamReady
 				bind:errorMessage
 				bind:virtualCursor
+				bind:mcpVirtualCursor
 				bind:canvasAPI
 				bind:previewDimensions
 				bind:lastFrameData={currentTabLastFrameData}
@@ -508,16 +498,6 @@
 				onRetry={handleGoClick}
 			/>
 		</div>
-
-		<!-- Virtual Cursor - User -->
-		{#if !isCurrentTabMcpControlled()}
-			<VirtualCursor cursor={virtualCursor} />
-		{/if}
-
-		<!-- MCP Virtual Cursor -->
-		{#if mcpHandler.mcpControlState.isControlled}
-			<VirtualCursor cursor={mcpVirtualCursor} />
-		{/if}
 
 		<!-- Native UI Overlays -->
 		<SelectDropdown
