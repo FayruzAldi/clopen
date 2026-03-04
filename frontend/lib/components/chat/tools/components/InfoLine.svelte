@@ -13,7 +13,7 @@
 	const { icon, text, iconColor = 'text-slate-500', textColor = 'text-slate-600 dark:text-slate-400', title="" }: Props = $props();
 </script>
 
-<div class="flex items-center gap-1.5" {title}>
-	<Icon name={icon} class="{iconColor} w-3.5 h-3.5" />
+<div class="flex items-start gap-1.5" {title}>
+	<Icon name={icon} class="{iconColor} w-3.5 h-3.5 flex-none" />
 	<span class="text-xs {textColor}">{text}</span>
 </div>

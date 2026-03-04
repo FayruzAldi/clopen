@@ -28,6 +28,7 @@
 	let hasInitiallyScrolled = $state(false);
 	let isContentReady = $state(false);
 	let lastToolResultsHash = $state('');
+	let lastSubAgentHash = $state('');
 	// Prevent scroll events from overriding isUserAtBottom during programmatic scroll
 	let scrollLockUntil = 0;
 
@@ -254,8 +255,10 @@
 		// Check for tool result updates ($result additions) across all messages
 		let toolResultChanged = false;
 		let currentToolResultsHash = '';
+		let subAgentChanged = false;
+		let currentSubAgentHash = '';
 
-		// Build a hash of all tool results to detect changes
+		// Build a hash of all tool results and sub-agent activities to detect changes
 		for (const message of filteredMessages) {
 			if ('message' in message) {
 				const messageContent = (message as any).message?.content;
@@ -263,6 +266,9 @@
 					for (const item of messageContent) {
 						if (item?.type === 'tool_use' && item.$result) {
 							currentToolResultsHash += `${item.id}:${JSON.stringify(item.$result).length}|`;
+						}
+						if (item?.type === 'tool_use' && item.$subMessages) {
+							currentSubAgentHash += `${item.id}:${item.$subMessages.length}|`;
 						}
 					}
 				}
@@ -275,6 +281,12 @@
 			lastToolResultsHash = currentToolResultsHash;
 		}
 
+		// Check if sub-agent activities have changed
+		if (currentSubAgentHash !== lastSubAgentHash) {
+			subAgentChanged = true;
+			lastSubAgentHash = currentSubAgentHash;
+		}
+
 		// When message count decreases (e.g. after undo/reload), scroll to bottom
 		if (isMessageCountDecreased && hasInitiallyScrolled) {
 			requestAnimationFrame(() => {
@@ -284,14 +296,14 @@
 			return;
 		}
 
-		// Scroll on new message, partial text changes, or tool result changes
-		if ((isNewMessage || partialTextChanged || toolResultChanged) && isUserAtBottom) {
+		// Scroll on new message, partial text changes, tool result changes, or sub-agent updates
+		if ((isNewMessage || partialTextChanged || toolResultChanged || subAgentChanged) && isUserAtBottom) {
 			requestAnimationFrame(() => {
 				if (editModeState.isEditing) return;
 
 				// During streaming, scroll immediately (instant via scrollMessagesToBottom)
 				// For non-streaming changes, add a small delay for smooth UX
-				if (partialTextChanged || hasStreamingMessage) {
+				if (partialTextChanged || hasStreamingMessage || subAgentChanged) {
 					scrollMessagesToBottom(false);
 				} else {
 					const delay = toolResultChanged ? 50 : 100;

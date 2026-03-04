@@ -6,17 +6,18 @@
 
 	const { toolInput }: { toolInput: AgentToolInput } = $props();
 
-	const description = toolInput.input.description || '';
-	const subagentType = toolInput.input.subagent_type || 'general-purpose';
-	const subMessages = (toolInput as any).$subMessages as SubAgentActivity[] | undefined;
-	const toolUseCount = subMessages?.filter(a => a.type === 'tool_use').length ?? 0;
+	const description = $derived(toolInput.input.description || '');
+	const subagentType = $derived(toolInput.input.subagent_type || 'general-purpose');
+	const subMessages = $derived(toolInput.$subMessages);
+	const toolUseCount = $derived(subMessages?.filter(a => a.type === 'tool_use').length ?? 0);
+	const result = $derived(toolInput.$result);
 
 	let scrollContainer: HTMLDivElement | undefined = $state();
 
 	// Auto-scroll to bottom when new activities arrive
 	$effect(() => {
-		const _len = subMessages?.length ?? 0;
-		if (_len > 0 && scrollContainer) {
+		const len = subMessages?.length ?? 0;
+		if (len > 0 && scrollContainer) {
 			tick().then(() => {
 				if (scrollContainer) {
 					scrollContainer.scrollTop = scrollContainer.scrollHeight;
@@ -42,7 +43,7 @@
 </script>
 
 <!-- Header card -->
-<div class="bg-white dark:bg-slate-800 rounded-md border border-slate-200/60 dark:border-slate-700/60 p-3">
+<div class="bg-white dark:bg-slate-800 rounded-md border border-slate-200/60 dark:border-slate-700/60 p-3 mb-2">
 	<div class="space-y-1">
 		<InfoLine icon="lucide:search" text={description} />
 		<InfoLine icon="lucide:bot" text="Using {subagentType} agent" />
@@ -55,7 +56,7 @@
 	<div class="text-xs text-slate-500 dark:text-slate-400 mb-2">
 		{toolUseCount} tool {toolUseCount === 1 ? 'call' : 'calls'}:
 	</div>
-	<div bind:this={scrollContainer} class="max-h-64 overflow-y-auto">
+	<div bind:this={scrollContainer} class="max-h-64 overflow-y-auto wrap-break-word">
 		<ul class="list-disc pl-5 space-y-0.5">
 			{#each subMessages as activity}
 				{#if activity.type === 'tool_use'}
@@ -77,8 +78,8 @@
 {/if}
 
 <!-- Tool Result -->
-{#if toolInput.$result}
-	{@const resultContent = toolInput.$result.content as any}
+<!-- {#if result}
+	{@const resultContent = result.content as any}
 	<div class="mt-4">
 		{#if typeof resultContent === 'string'}
 			<TextMessage content={resultContent} />
@@ -92,4 +93,4 @@
 			<TextMessage content={JSON.stringify(resultContent)} />
 		{/if}
 	</div>
-{/if}
+{/if} -->
