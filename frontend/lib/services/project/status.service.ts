@@ -21,6 +21,7 @@ export interface ProjectStatus {
     status: string;
     startedAt: string;
     messagesCount: number;
+    isWaitingInput?: boolean;
   }[];
   /** Per-chat-session user presence: { chatSessionId → users[] } */
   chatSessionUsers?: Record<string, { userId: string; userName: string }[]>;

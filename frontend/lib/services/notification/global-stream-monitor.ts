@@ -13,7 +13,6 @@
 
 import { soundNotification, pushNotification } from '$frontend/lib/services/notification';
 import { projectState } from '$frontend/lib/stores/core/projects.svelte';
-import { sessionState } from '$frontend/lib/stores/core/sessions.svelte';
 import { debug } from '$shared/utils/logger';
 import ws from '$frontend/lib/utils/ws';
 
@@ -24,8 +23,8 @@ class GlobalStreamMonitor {
    * Initialize the monitor - subscribes to the WS event.
    * Safe to call multiple times (idempotent).
    *
-   * Only triggers sound/push when the finished stream belongs to the
-   * user's current project AND current chat session.
+   * Triggers sound/push for ALL projects the user is a member of,
+   * not just the active one — background streams deserve notifications too.
    */
   initialize(): void {
     if (this.initialized) return;
@@ -34,21 +33,13 @@ class GlobalStreamMonitor {
     debug.log('notification', 'GlobalStreamMonitor: Initializing WS listener');
 
     ws.on('chat:stream-finished', async (data) => {
-      const { projectId, chatSessionId, status, timestamp } = data;
-      const isActiveProject = projectState.currentProject?.id === projectId;
-      const isActiveSession = sessionState.currentSession?.id === chatSessionId;
+      const { projectId, status, timestamp } = data;
 
       debug.log('notification', 'GlobalStreamMonitor: Stream finished', {
         projectId,
-        chatSessionId,
         status,
-        timestamp,
-        isActiveProject,
-        isActiveSession
+        timestamp
       });
-
-      // Only notify if the stream is for the user's current project AND session
-      if (!isActiveProject || !isActiveSession) return;
 
       // Play sound notification
       try {

@@ -3,8 +3,46 @@
  * Shared logic for getting project status data
  */
 
-import { streamManager } from '../chat/stream-manager.js';
+import { streamManager, type StreamState } from '../chat/stream-manager.js';
 import { ws } from '../utils/ws.js';
+
+// Interactive tools that block the stream waiting for user input
+const INTERACTIVE_TOOLS = new Set(['AskUserQuestion']);
+
+/**
+ * Check if an active stream is waiting for user input.
+ * Scans stream messages for unanswered interactive tool_use blocks.
+ * This is the backend single source of truth — works even when the
+ * user is on a different project and not receiving chat events.
+ */
+function detectStreamWaitingInput(stream: StreamState): boolean {
+  if (stream.status !== 'active') return false;
+
+  const answeredToolIds = new Set<string>();
+  for (const event of stream.messages) {
+    const msg = event.message;
+    if (!msg || (msg as any).type !== 'user' || !(msg as any).content) continue;
+    const content = Array.isArray((msg as any).content) ? (msg as any).content : [];
+    for (const item of content) {
+      if (item.type === 'tool_result' && item.tool_use_id) {
+        answeredToolIds.add(item.tool_use_id);
+      }
+    }
+  }
+
+  for (const event of stream.messages) {
+    const msg = event.message;
+    if (!msg || (msg as any).type !== 'assistant' || !(msg as any).content) continue;
+    const content = Array.isArray((msg as any).content) ? (msg as any).content : [];
+    if (content.some((item: any) =>
+      item.type === 'tool_use' && INTERACTIVE_TOOLS.has(item.name) && item.id && !answeredToolIds.has(item.id)
+    )) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 // Store active users per project (shared with main endpoint)
 const projectUsers = new Map<string, Set<{ userId: string; userName: string; lastSeen: number }>>();
@@ -52,7 +90,8 @@ export async function getProjectStatusData(projectId?: string) {
         chatSessionId: s.chatSessionId,
         status: s.status,
         startedAt: s.startedAt,
-        messagesCount: s.messages.length
+        messagesCount: s.messages.length,
+        isWaitingInput: detectStreamWaitingInput(s)
       })),
       chatSessionUsers: Object.fromEntries(
         Array.from(chatSessionUsers.entries()).map(([csId, csUsers]) => [
@@ -93,7 +132,8 @@ export async function getProjectStatusData(projectId?: string) {
           chatSessionId: stream.chatSessionId,
           status: stream.status,
           startedAt: stream.startedAt,
-          messagesCount: stream.messages.length
+          messagesCount: stream.messages.length,
+          isWaitingInput: detectStreamWaitingInput(stream)
         });
       }
     });

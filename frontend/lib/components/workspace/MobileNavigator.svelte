@@ -17,8 +17,6 @@
 	import type { Project } from '$shared/types/database/schema';
 	import FolderBrowser from '$frontend/lib/components/common/FolderBrowser.svelte';
 	import ProjectUserAvatars from '$frontend/lib/components/common/ProjectUserAvatars.svelte';
-	import { sessionState } from '$frontend/lib/stores/core/sessions.svelte';
-	import { getSessionProcessState } from '$frontend/lib/stores/core/app.svelte';
 	import ws from '$frontend/lib/utils/ws';
 	import { debug } from '$shared/utils/logger';
 
@@ -67,19 +65,17 @@
 		}
 	}
 
-	// Get status color from presence data (single source of truth)
-	// Green only when the project is the CURRENT project AND the current chat session has an active stream
+	// Get status color from presence data (single source of truth from backend)
+	// Shows real-time status for ALL projects, not just the active one.
+	// Uses backend-computed isWaitingInput so background sessions are accurate
+	// even when the frontend hasn't received their chat events.
 	function getStatusColor(projectId: string): string {
-		const currentProjectId = projectState.currentProject?.id;
-		if (projectId !== currentProjectId) return 'bg-slate-500/30';
 		const status = presenceState.statuses.get(projectId);
-		const currentChatSessionId = sessionState.currentSession?.id;
-		if (!status?.streams || !currentChatSessionId) return 'bg-slate-500/30';
-		const hasActiveForSession = status.streams.some(
-			(s: any) => s.status === 'active' && s.chatSessionId === currentChatSessionId
-		);
-		if (hasActiveForSession) return currentChatSessionId && getSessionProcessState(currentChatSessionId).isWaitingInput ? 'bg-amber-500' : 'bg-emerald-500';
-		return 'bg-slate-500/30';
+		if (!status?.streams) return 'bg-slate-500/30';
+		const activeStreams = status.streams.filter((s: any) => s.status === 'active');
+		if (activeStreams.length === 0) return 'bg-slate-500/30';
+		const hasWaitingInput = activeStreams.some((s: any) => s.isWaitingInput);
+		return hasWaitingInput ? 'bg-amber-500' : 'bg-emerald-500';
 	}
 
 	function openAddProject() {
