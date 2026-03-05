@@ -8,7 +8,7 @@
 import type { McpSdkServerConfigWithInstance, McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { McpLocalConfig } from '@opencode-ai/sdk';
 import type { ServerConfig, ParsedMcpToolName, ServerName } from './types';
-import { serverRegistry } from './servers';
+import { serverRegistry, serverFactories } from './servers';
 import { debug } from '$shared/utils/logger';
 import { resolve } from 'path';
 import { SERVER_ENV } from '../shared/env';
@@ -84,14 +84,18 @@ export const mcpServers: Record<string, ServerConfig & { instance: McpSdkServerC
 // ============================================================================
 
 /**
- * Get all enabled MCP servers for Claude SDK
+ * Get all enabled MCP servers for Claude SDK.
+ *
+ * Creates FRESH server instances each call so that concurrent streams
+ * each get their own Protocol — avoids "Already connected to a transport" errors.
  */
 export function getEnabledMcpServers(): Record<string, McpServerConfig> {
 	const enabledServers: Record<string, McpServerConfig> = {};
 
 	Object.entries(mcpServers).forEach(([serverName, serverConfig]) => {
 		if (serverConfig.enabled) {
-			enabledServers[serverName] = serverConfig.instance;
+			const factory = serverFactories[serverName as ServerName];
+			enabledServers[serverName] = factory ? factory() : serverConfig.instance;
 			debug.log('mcp', `✓ Enabled MCP server: ${serverName}`);
 		} else {
 			debug.log('mcp', `✗ Disabled MCP server: ${serverName}`);

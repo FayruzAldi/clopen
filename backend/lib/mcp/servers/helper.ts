@@ -52,6 +52,8 @@ interface ServerWithMeta<
 	TToolNames extends readonly string[]
 > {
 	server: ReturnType<typeof createSdkMcpServer>;
+	/** Factory that creates a fresh SDK server instance (new Protocol, safe for concurrent use) */
+	createInstance: () => ReturnType<typeof createSdkMcpServer>;
 	meta: {
 		readonly name: TName;
 		readonly tools: TToolNames;
@@ -84,32 +86,36 @@ export function defineServer<
 	// Build raw tool definitions (engine-agnostic)
 	const toolDefs: Record<string, RawToolDef> = {};
 
-	// Convert tools object to SDK format (array of tools)
-	const sdkTools = toolNames.map((toolName) => {
+	// Build raw tool definitions (engine-agnostic) and store for reuse
+	toolNames.forEach((toolName) => {
 		const toolDef = config.tools[toolName] as any;
-		// If schema is not provided, use empty object
 		const schema = toolDef.schema || {};
 
-		// Store raw definition for reuse
 		toolDefs[toolName as string] = {
 			description: toolDef.description,
 			schema,
 			handler: toolDef.handler,
 		};
-
-		return tool(toolName as string, toolDef.description, schema, toolDef.handler);
 	});
 
-	// Create SDK server
-	const server = createSdkMcpServer({
-		name: config.name,
-		version: config.version,
-		tools: sdkTools
-	});
+	// Factory: creates a fresh SDK server instance with new Protocol (safe for concurrent use)
+	const createInstance = () => {
+		const sdkTools = toolNames.map((toolName) => {
+			const def = toolDefs[toolName as string];
+			return tool(toolName as string, def.description, def.schema, def.handler as any);
+		});
 
-	// Return server with metadata
+		return createSdkMcpServer({
+			name: config.name,
+			version: config.version,
+			tools: sdkTools
+		});
+	};
+
+	// Return server with metadata and factory
 	return {
-		server,
+		server: createInstance(),
+		createInstance,
 		meta: {
 			name: config.name,
 			tools: toolNames as any,
@@ -126,10 +132,12 @@ export function buildServerRegistries<
 >(servers: T) {
 	const metadata = {} as any;
 	const registry = {} as any;
+	const factories = {} as any;
 
 	for (const server of servers) {
 		metadata[server.meta.name] = server.meta;
 		registry[server.meta.name] = server.server;
+		factories[server.meta.name] = server.createInstance;
 	}
 
 	return {
@@ -138,6 +146,9 @@ export function buildServerRegistries<
 		},
 		registry: registry as {
 			[K in T[number]['meta']['name']]: Extract<T[number], { meta: { name: K } }>['server']
+		},
+		factories: factories as {
+			[K in T[number]['meta']['name']]: () => Extract<T[number], { meta: { name: K } }>['server']
 		}
 	};
 }
