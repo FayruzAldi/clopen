@@ -32,7 +32,7 @@ const allServers = [
 /**
  * Auto-build registries from server array
  */
-const { metadata, registry } = buildServerRegistries(allServers);
+const { metadata, registry, factories } = buildServerRegistries(allServers);
 
 /**
  * Server Metadata Registry - Defines available servers and their tools
@@ -43,3 +43,8 @@ export const serverMetadata = metadata;
  * Server Instance Registry - Maps server names to SDK instances
  */
 export const serverRegistry = registry;
+
+/**
+ * Server Factory Registry - Creates fresh SDK instances (safe for concurrent streams)
+ */
+export const serverFactories = factories;
