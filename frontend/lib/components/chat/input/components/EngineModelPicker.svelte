@@ -146,10 +146,15 @@
 	});
 
 	// Initialize model picker based on session state:
-	// - New session (no messages): apply Settings defaults
-	// - Existing session (has messages): restore from session's persisted engine/model
-	// Reads are done outside untrack (tracked), writes inside untrack (not tracked)
-	// to prevent UpdatedAtError from circular chatModelState read-write.
+	// - Session with persisted engine/model: restore from session (highest priority)
+	// - New session (no messages, no persisted engine/model): apply Settings defaults
+	// - Legacy session without engine/model: fall back to Settings defaults
+	//
+	// IMPORTANT: Session engine/model is checked BEFORE hasStartedChat because
+	// when switching sessions, messages load asynchronously AFTER the session is set.
+	// If we checked hasStartedChat first, there's a window where messages haven't
+	// loaded yet (hasStartedChat=false) → defaults would be applied, overriding the
+	// session's actual engine/model selection.
 	$effect(() => {
 		const session = sessionState.currentSession;
 		const _sessionId = session?.id;
@@ -162,12 +167,14 @@
 		const sessionAccountId = session?.claude_account_id;
 
 		untrack(() => {
-			if (!started) {
-				// New session (no messages): apply Settings defaults
-				initChatModel(sEngine, sModel, sMemory || {});
-			} else if (sessionEngine && sessionModel) {
-				// Existing session with persisted engine/model: restore
+			if (sessionEngine && sessionModel) {
+				// Session has persisted engine/model: always restore from session.
+				// This works for both existing sessions (has messages) and sessions
+				// where messages are still loading asynchronously.
 				restoreChatModelFromSession(sessionEngine, sessionModel, sessionAccountId);
+			} else if (!started) {
+				// New session (no messages, no persisted engine/model): apply Settings defaults
+				initChatModel(sEngine, sModel, sMemory || {});
 			} else {
 				// Existing session without engine/model (pre-migration or not yet set):
 				// fall back to Settings defaults
