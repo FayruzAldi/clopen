@@ -16,6 +16,7 @@
 	import { presenceState } from '$frontend/lib/stores/core/presence.svelte';
 	import { userStore } from '$frontend/lib/stores/features/user.svelte';
 	import { addNotification } from '$frontend/lib/stores/ui/notification.svelte';
+	import { chatService } from '$frontend/lib/services/chat/chat.service';
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import ChatMessages from './message/ChatMessages.svelte';
@@ -212,6 +213,12 @@
 				duration: 3000
 			});
 			return;
+		}
+
+		// Reset frontend state without killing the backend stream
+		// The old session's stream continues running in the background
+		if (appState.isLoading) {
+			chatService.resetForSessionSwitch();
 		}
 
 		// Clear messages for the local view
