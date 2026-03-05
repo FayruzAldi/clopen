@@ -23,6 +23,10 @@ This document provides guidelines for Claude Code when working on the Clopen pro
 
 - Run `bun run check` and `bun run lint` to ensure code functions properly
 - Do not create any .md files unless explicitly instructed
+- Suggest a branch name and commit message following CONTRIBUTING.md conventions:
+  - Branch: `<type>/<description>` — lowercase, kebab-case, concise
+  - Commit: `<type>(<scope>): <subject>` — imperative mood, lowercase, no period, max 72 chars
+  - Do NOT create the branch or commit automatically — only suggest the names for review
 
 ---
 
