@@ -83,9 +83,15 @@
 
 	// Panel actions menu state
 	let showActionsMenu = $state(false);
+	let actionsButtonRef = $state<HTMLButtonElement | null>(null);
+	let menuPosition = $state({ top: 0, left: 0 });
 
 	function toggleActionsMenu(e: MouseEvent) {
 		e.stopPropagation();
+		if (!showActionsMenu && actionsButtonRef) {
+			const rect = actionsButtonRef.getBoundingClientRect();
+			menuPosition = { top: rect.bottom + 4, left: rect.left };
+		}
 		showActionsMenu = !showActionsMenu;
 	}
 
@@ -157,6 +163,7 @@
 		{#if !isMobile}
 			<div class="relative -ml-0.5 mr-2 border-slate-200 dark:border-slate-700">
 				<button
+					bind:this={actionsButtonRef}
 					type="button"
 					class="flex items-center justify-center w-6 h-6 bg-transparent border-none rounded-md text-slate-400 cursor-pointer transition-all duration-150 hover:bg-violet-500/10 hover:text-slate-700 dark:hover:text-slate-200"
 					onclick={toggleActionsMenu}
@@ -167,7 +174,7 @@
 
 				{#if showActionsMenu}
 					<div class="fixed inset-0 z-40" onclick={closeActionsMenu}></div>
-					<div class="absolute top-full left-0 mt-1 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg overflow-hidden min-w-44 py-1">
+					<div class="fixed z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg overflow-hidden min-w-44 py-1" style="top: {menuPosition.top}px; left: {menuPosition.left}px;">
 						<!-- Switch to section -->
 						<div class="px-3 py-1.5 text-3xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
 							Switch to
