@@ -146,9 +146,10 @@
 			return;
 		}
 
-		// Cancel active stream if running
+		// Reset frontend state without killing the backend stream
+		// The old session's stream continues running in the background
 		if (appState.isLoading) {
-			chatService.cancelRequest();
+			chatService.resetForSessionSwitch();
 		}
 
 		// Clear server input state and prevent stale restore on ChatInput remount
