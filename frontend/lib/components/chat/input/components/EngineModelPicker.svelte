@@ -395,7 +395,7 @@
 	}
 </script>
 
-<div class="flex items-center gap-1.5 px-4 pt-2 pb-0.5 -mb-2">
+<div class="flex items-center gap-1.5 px-4 pt-2 pb-0.5">
 	<button
 		bind:this={triggerButton}
 		type="button"

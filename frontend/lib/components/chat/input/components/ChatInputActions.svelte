@@ -37,7 +37,7 @@
 	);
 </script>
 
-<div class="absolute bottom-2 right-2 flex items-center gap-1.5">
+<div class="flex items-center gap-1.5 flex-shrink-0 pr-2 pb-2">
 	{#if !isLoading}
 		<!-- Attach file button -->
 		<button
