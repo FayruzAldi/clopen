@@ -284,16 +284,10 @@
 			/>
 		</div>
 	{:else}
-		<!-- No active session -->
+		<!-- No active session - will auto-connect -->
 		<div class="flex-1 flex items-center justify-center font-mono">
 			<div class="text-center text-slate-600 dark:text-slate-400">
 				<p>No terminal sessions available</p>
-				<button
-					class="mt-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md transition-colors"
-					onclick={handleNewSession}
-				>
-					Create New Terminal
-				</button>
 			</div>
 		</div>
 	{/if}

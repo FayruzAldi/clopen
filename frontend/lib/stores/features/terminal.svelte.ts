@@ -469,6 +469,12 @@ export const terminalStore = {
 
 			case 'error':
 				if (data.content) {
+					// If PTY session is gone, auto-close the tab instead of showing error
+					if (data.content.includes('Session not found') || data.content.includes('PTY not available')) {
+						debug.log('terminal', `🧹 Auto-closing dead terminal tab: ${sessionId}`);
+						this.closeSession(sessionId);
+						return;
+					}
 					// Error messages are usually complete, but still buffer for safety
 					this.processBufferedOutput(sessionId, data.content, 'error');
 				}
