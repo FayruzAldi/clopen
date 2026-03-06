@@ -32,11 +32,18 @@ const defaultSettings: AppSettings = {
 	soundNotifications: true,
 	pushNotifications: false,
 	layoutPresetVisibility: createDefaultPresetVisibility(),
-	allowedBasePaths: []
+	allowedBasePaths: [],
+	fontSize: 13
 };
 
 // Create and export reactive settings state directly (starts with defaults)
 export const settings = $state<AppSettings>({ ...defaultSettings });
+
+export function applyFontSize(size: number): void {
+	if (typeof window !== 'undefined') {
+		document.documentElement.style.fontSize = `${size}px`;
+	}
+}
 
 /**
  * Apply server-provided settings during initialization.
@@ -46,6 +53,7 @@ export function applyServerSettings(serverSettings: Partial<AppSettings> | null)
 	if (serverSettings && typeof serverSettings === 'object') {
 		// Merge with defaults to ensure all properties exist
 		Object.assign(settings, { ...defaultSettings, ...serverSettings });
+		applyFontSize(settings.fontSize);
 		debug.log('settings', 'Applied server settings');
 	}
 }
