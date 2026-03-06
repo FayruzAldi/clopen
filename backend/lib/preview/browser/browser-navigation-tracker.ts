@@ -62,6 +62,8 @@ export class BrowserNavigationTracker extends EventEmitter {
 		});
 
 		// Track hash changes (fragment identifier changes like #contact-us)
+		// Temporarily disabled URL tracking injection to test CloudFlare evasion
+		/*
 		await page.evaluateOnNewDocument(() => {
 			let lastUrl = window.location.href;
 
@@ -86,6 +88,7 @@ export class BrowserNavigationTracker extends EventEmitter {
 			// Periodically check for URL changes (for SPA navigation)
 			setInterval(checkUrlChange, 500);
 		});
+		*/
 	}
 
 	async navigateSession(sessionId: string, session: BrowserTab, url: string): Promise<string> {

@@ -219,8 +219,9 @@ export class BrowserPreviewService extends EventEmitter {
 		await this.navigationTracker.setupNavigationTracking(tab.id, tab.page, tab);
 
 		// Setup dialog bindings and handling
-		await this.dialogHandler.setupDialogBindings(tab.id, tab.page);
-		await this.dialogHandler.setupDialogHandling(tab.id, tab.page, tab);
+		// Temporarily disable dialog injection to test CloudFlare evasion
+		// await this.dialogHandler.setupDialogBindings(tab.id, tab.page);
+		// await this.dialogHandler.setupDialogHandling(tab.id, tab.page, tab);
 
 		return tab;
 	}

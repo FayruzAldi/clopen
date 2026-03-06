@@ -157,7 +157,8 @@ export class BrowserVideoCapture extends EventEmitter {
 			// Inject persistent video encoder script (survives navigation)
 			// Only inject once per page instance
 			if (!videoSession.scriptInjected) {
-				await page.evaluateOnNewDocument(videoEncoderScript, videoConfig);
+				// Temporarily disable evaluateOnNewDocument for evasion test
+				// await page.evaluateOnNewDocument(videoEncoderScript, videoConfig);
 				videoSession.scriptInjected = true;
 				debug.log('webcodecs', `Persistent video encoder script injected for ${sessionId}`);
 			}

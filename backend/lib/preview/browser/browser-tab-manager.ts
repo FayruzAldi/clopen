@@ -623,41 +623,116 @@ export class BrowserTabManager extends EventEmitter {
 		page.setDefaultNavigationTimeout(30000);
 
 		// Configure page for stability
-		await page.setExtraHTTPHeaders({
-			'Accept-Language': 'en-US,en;q=0.9',
-			'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-		});
-
-		// Optimize font loading to prevent screenshot timeouts
-		await page.evaluateOnNewDocument(() => {
-			// Disable font loading wait
-			Object.defineProperty(document, 'fonts', {
-				value: {
-					ready: Promise.resolve(),
-					load: () => Promise.resolve([]),
-					check: () => true,
-					addEventListener: () => {},
-					removeEventListener: () => {}
-				}
-			});
-		});
+		// Note: Do NOT set HTTP headers manually here (like Accept-Language).
+		// Setting extra headers alters the HTTP/2 pseudo-header order and capitalization
+		// which immediately gets flagged by Cloudflare's TLS/Fingerprint matching algorithms.
 
 		// Inject audio capture script BEFORE page loads to intercept AudioContext
-		await this.audioCapture.setupAudioCapture(page, DEFAULT_STREAMING_CONFIG.audio);
+		// Temporarily disable audio injection as patching AudioContext is heavily flagged by Cloudflare
+		// await this.audioCapture.setupAudioCapture(page, DEFAULT_STREAMING_CONFIG.audio);
 
 		// Simplified cursor tracking for visual feedback only
 		await this.injectCursorTracking(page);
+
+		// Suppress Cloudflare Turnstile error callbacks to prevent sites from showing
+		// "CAPTCHA verification failed" popups in headless Chrome (error 600010).
+		//
+		// Strategy: Let the real Turnstile script load and define window.turnstile normally
+		// (needed for CF Managed Challenge auto-pass via StealthPlugin fingerprinting).
+		// Intercept window.turnstile assignment via getter/setter and patch render()/execute()
+		// to replace error-callback/expired-callback with no-ops before they are registered.
+		// Also strip data-error-callback attributes from DOM elements via MutationObserver
+		// to cover implicit render (data-sitekey) usage.
+		//
+		// This does NOT block challenges.cloudflare.com — CF Managed Challenge needs that
+		// URL to run its JS verification. Only the error reporting path is suppressed.
+		await page.evaluateOnNewDocument(function () {
+			(function () {
+				 
+				let _turnstile: any;
+
+				function patchOptions(options: Record<string, unknown>) {
+					return Object.assign({}, options, {
+						'error-callback': function () {},
+						'expired-callback': function () {}
+					});
+				}
+
+				 
+				function patchApi(api: any) {
+					if (!api || typeof api !== 'object') return api;
+					['render', 'execute'].forEach(function (method: string) {
+						if (typeof api[method] === 'function') {
+							const orig = api[method].bind(api);
+							api[method] = function (container: unknown, opts: Record<string, unknown>) {
+								return orig(container, patchOptions(opts || {}));
+							};
+						}
+					});
+					return api;
+				}
+
+				try {
+					Object.defineProperty(window, 'turnstile', {
+						configurable: true,
+						enumerable: true,
+						 
+						get() { return _turnstile; },
+						 
+						set(val: any) { _turnstile = patchApi(val); }
+					});
+				} catch {
+					// Property already defined or can't be intercepted
+				}
+
+				// Strip data-error-callback / data-expired-callback from Turnstile elements
+				// before implicit render reads them, so no error handler is registered.
+				function stripErrorAttrs(el: Element) {
+					el.removeAttribute('data-error-callback');
+					el.removeAttribute('data-expired-callback');
+				}
+
+				const mo = new MutationObserver(function (mutations) {
+					mutations.forEach(function (m) {
+						m.addedNodes.forEach(function (node) {
+							if (!(node instanceof Element)) return;
+							if (node.hasAttribute('data-error-callback') || node.hasAttribute('data-expired-callback')) {
+								stripErrorAttrs(node);
+							}
+							node.querySelectorAll('[data-error-callback],[data-expired-callback]').forEach(stripErrorAttrs);
+						});
+					});
+				});
+				if (document.documentElement) {
+					mo.observe(document.documentElement, { childList: true, subtree: true });
+				}
+			})();
+		});
+
+		// Auto-dismiss native browser dialogs to prevent page hang in headless mode.
+		// alert() → accept (one-way informational, safe to dismiss)
+		// confirm()/prompt() → dismiss/cancel (avoid unintended side effects)
+		// CAPTCHA-related alerts are silently dismissed.
+		page.on('dialog', async (dialog) => {
+			const type = dialog.type();
+			if (type === 'alert') {
+				await dialog.accept().catch(() => {});
+			} else {
+				await dialog.dismiss().catch(() => {});
+			}
+		});
 	}
 
 	/**
 	 * Inject cursor tracking script
 	 */
 	private async injectCursorTracking(page: Page) {
-		await page.evaluateOnNewDocument(cursorTrackingScript);
+		// Temporarily disabled mapping logic as CloudFlare frequently flags evaluateOnNewDocument injected tracking events
+		// await page.evaluateOnNewDocument(cursorTrackingScript);
 	}
 
 	/**
-	 * Navigate with retry
+	 * Navigate with retry, including Cloudflare auto-pass detection and CAPTCHA popup dismissal.
 	 */
 	private async navigateWithRetry(page: Page, url: string): Promise<string> {
 		let retries = 3;
@@ -669,7 +744,9 @@ export class BrowserTabManager extends EventEmitter {
 					waitUntil: 'domcontentloaded',
 					timeout: 30000
 				});
-				actualUrl = page.url();
+				actualUrl = await this.waitForCloudflareIfPresent(page);
+				// Dismiss any CAPTCHA failure popups from embedded Turnstile widgets
+				await this.dismissCaptchaPopupsIfPresent(page);
 				break;
 			} catch (error) {
 				retries--;
@@ -682,6 +759,168 @@ export class BrowserTabManager extends EventEmitter {
 		}
 
 		return actualUrl;
+	}
+
+	/**
+	 * Detect Cloudflare challenge page and wait for auto-pass redirect.
+	 * Loops up to MAX_CF_RETRIES times to handle infinite verify loops where
+	 * Cloudflare keeps redirecting back to a new challenge after each pass.
+	 */
+	private async waitForCloudflareIfPresent(page: Page): Promise<string> {
+		const MAX_CF_RETRIES = 5;
+
+		for (let attempt = 0; attempt < MAX_CF_RETRIES; attempt++) {
+			let isChallenge = false;
+
+			try {
+				isChallenge = await page.evaluate(() => {
+					const title = document.title;
+					const bodyText = (document.body?.innerText || '').slice(0, 500).toLowerCase();
+					return (
+						// Old automated CF challenge
+						title === 'Just a moment...' ||
+						// Newer interactive CF challenge ("Performing security verification")
+						title.toLowerCase().includes('security verification') ||
+						bodyText.includes('verify you are human') ||
+						bodyText.includes('performing security verification') ||
+						// CF challenge DOM elements (reliable, present on challenge pages only)
+						document.getElementById('challenge-running') !== null ||
+						document.getElementById('cf-challenge-running') !== null ||
+						document.getElementById('challenge-form') !== null ||
+						document.querySelector('#challenge-stage') !== null
+					);
+				});
+			} catch {
+				// Page not evaluable (navigating, closed) — not a CF challenge
+				break;
+			}
+
+			if (!isChallenge) {
+				break;
+			}
+
+			debug.log('preview', `🛡️ Cloudflare challenge detected (attempt ${attempt + 1}/${MAX_CF_RETRIES}), waiting for auto-pass...`);
+
+			try {
+				await page.waitForNavigation({
+					waitUntil: 'domcontentloaded',
+					timeout: 20000
+				});
+				debug.log('preview', `✅ Cloudflare navigation → ${page.url()}`);
+			} catch {
+				debug.warn('preview', `⚠️ Cloudflare auto-pass timed out on attempt ${attempt + 1}, proceeding`);
+				break;
+			}
+		}
+
+		return page.url();
+	}
+
+	/**
+	 * Inject a persistent non-blocking watcher into the page that auto-dismisses
+	 * CAPTCHA failure popups whenever they appear (Cloudflare Turnstile error 600010,
+	 * reCAPTCHA failures, etc.).
+	 *
+	 * Uses MutationObserver + setInterval so it catches popups regardless of when they
+	 * appear after page load. Returns immediately — the watcher runs inside the page.
+	 */
+	private async dismissCaptchaPopupsIfPresent(page: Page): Promise<void> {
+		try {
+			await page.evaluate(() => {
+				const CAPTCHA_WORDS = ['captcha', 'turnstile', 'human verification', 'robot', 'bot detected'];
+				const FAIL_WORDS = ['failed', 'error', 'invalid', 'verification failed', 'try again', 'unable to verify'];
+				const DISMISS_LABELS = ['ok', 'close', 'dismiss', 'cancel', 'retry', 'try again', 'continue', 'got it'];
+
+				const isCaptchaText = (text: string): boolean => {
+					const t = text.toLowerCase();
+					return (
+						CAPTCHA_WORDS.some(w => t.includes(w)) &&
+						FAIL_WORDS.some(w => t.includes(w))
+					);
+				};
+
+				const tryDismiss = (): boolean => {
+					// Strategy 1: click a dismiss button whose ancestor contains CAPTCHA failure text
+					const buttons = Array.from(document.querySelectorAll<HTMLElement>(
+						'button, input[type="button"], input[type="submit"], a[role="button"]'
+					));
+					for (const btn of buttons) {
+						const label = (
+							btn instanceof HTMLInputElement ? btn.value : btn.innerText || btn.textContent || ''
+						).trim().toLowerCase();
+						if (!DISMISS_LABELS.includes(label)) continue;
+
+						let el: Element | null = btn.parentElement;
+						while (el && el !== document.body) {
+							if (isCaptchaText((el as HTMLElement).innerText || '')) {
+								(btn as HTMLElement).click();
+								return true;
+							}
+							el = el.parentElement;
+						}
+					}
+
+					// Strategy 2: hide any visible modal/overlay containing CAPTCHA failure text
+					const overlaySelectors = [
+						'[class*="modal"]', '[class*="popup"]', '[class*="dialog"]',
+						'[class*="overlay"]', '[class*="alert"]', '[class*="notification"]',
+						'[role="dialog"]', '[role="alertdialog"]', '[role="alert"]'
+					];
+					const overlays = document.querySelectorAll<HTMLElement>(overlaySelectors.join(','));
+					for (const overlay of overlays) {
+						if (!isCaptchaText(overlay.innerText || '')) continue;
+						const style = overlay.style;
+						if (style.display === 'none' || style.visibility === 'hidden') continue;
+
+						// Try clicking a close button first
+						const closeBtn = overlay.querySelector<HTMLElement>(
+							'button, [class*="close"], [aria-label*="lose"], [aria-label*="ismiss"]'
+						);
+						if (closeBtn) {
+							closeBtn.click();
+						} else {
+							style.display = 'none';
+						}
+						return true;
+					}
+
+					return false;
+				};
+
+				// Run immediately in case popup is already present
+				if (tryDismiss()) return;
+
+				// Set up persistent watcher — fires on any DOM mutation
+				const observer = new MutationObserver(() => {
+					if (tryDismiss()) {
+						observer.disconnect();
+						clearInterval(ticker);
+					}
+				});
+
+				// Also poll via interval as safety net (MutationObserver may miss text changes)
+				const ticker = setInterval(() => {
+					if (tryDismiss()) {
+						clearInterval(ticker);
+						observer.disconnect();
+					}
+				}, 400);
+
+				if (document.body) {
+					observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+				}
+
+				// Self-cleanup after 30 seconds to avoid memory leaks
+				setTimeout(() => {
+					observer.disconnect();
+					clearInterval(ticker);
+				}, 30000);
+			});
+
+			debug.log('preview', '🔔 CAPTCHA auto-dismiss watcher injected into page');
+		} catch {
+			// Page closed or navigated away — ignore
+		}
 	}
 
 	/**
