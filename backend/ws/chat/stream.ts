@@ -158,7 +158,7 @@ export const streamHandler = createRouter()
 							broadcastPresence().catch(() => {});
 							break;
 
-						case 'message':
+						case 'message': {
 							ws.emit.chatSession(chatSessionId, 'chat:message', {
 								processId: event.processId,
 								message: event.data.message,
@@ -171,7 +171,26 @@ export const streamHandler = createRouter()
 								engine: event.data.engine,
 								seq: event.seq
 							});
+							// Broadcast presence when waiting-input state may change
+							// (AskUserQuestion tool_use arrives or tool_result clears it)
+							const msgContent = Array.isArray(event.data.message?.message?.content) ? event.data.message.message.content : [];
+							const askToolUse = msgContent.find((item: any) =>
+								item.type === 'tool_use' && item.name === 'AskUserQuestion'
+							);
+							if (askToolUse || msgContent.some((item: any) => item.type === 'tool_result')) {
+								broadcastPresence().catch(() => {});
+							}
+							// Notify all project members when AskUserQuestion arrives (sound + push)
+							if (askToolUse && projectId) {
+								ws.emit.projectMembers(projectId, 'chat:waiting-input', {
+									projectId,
+									chatSessionId,
+									toolUseId: askToolUse.id,
+									timestamp: event.data.timestamp || new Date().toISOString()
+								});
+							}
 							break;
+						}
 
 						case 'partial':
 							ws.emit.chatSession(chatSessionId, 'chat:partial', {
@@ -281,7 +300,7 @@ export const streamHandler = createRouter()
 							});
 							break;
 
-						case 'message':
+						case 'message': {
 							ws.emit.chatSession(chatSessionId, 'chat:message', {
 								processId: event.processId,
 								message: event.data.message,
@@ -294,7 +313,24 @@ export const streamHandler = createRouter()
 								engine: event.data.engine,
 								seq: event.seq
 							});
+							// Broadcast presence when waiting-input state may change
+							const reconnMsgContent = Array.isArray(event.data.message?.message?.content) ? event.data.message.message.content : [];
+							const reconnAskToolUse = reconnMsgContent.find((item: any) =>
+								item.type === 'tool_use' && item.name === 'AskUserQuestion'
+							);
+							if (reconnAskToolUse || reconnMsgContent.some((item: any) => item.type === 'tool_result')) {
+								broadcastPresence().catch(() => {});
+							}
+							if (reconnAskToolUse && projectId) {
+								ws.emit.projectMembers(projectId, 'chat:waiting-input', {
+									projectId,
+									chatSessionId,
+									toolUseId: reconnAskToolUse.id,
+									timestamp: event.data.timestamp || new Date().toISOString()
+								});
+							}
 							break;
+						}
 
 						case 'partial':
 							ws.emit.chatSession(chatSessionId, 'chat:partial', {
@@ -745,5 +781,12 @@ export const streamHandler = createRouter()
 		projectId: t.String(),
 		chatSessionId: t.String(),
 		status: t.Union([t.Literal('completed'), t.Literal('error'), t.Literal('cancelled')]),
+		timestamp: t.String()
+	}))
+
+	.emit('chat:waiting-input', t.Object({
+		projectId: t.String(),
+		chatSessionId: t.String(),
+		toolUseId: t.String(),
 		timestamp: t.String()
 	}));

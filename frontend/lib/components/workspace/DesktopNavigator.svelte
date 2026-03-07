@@ -7,7 +7,7 @@
 	import { addNotification } from '$frontend/lib/stores/ui/notification.svelte';
 	import { openSettingsModal } from '$frontend/lib/stores/ui/settings-modal.svelte';
 	import { projectStatusService } from '$frontend/lib/services/project';
-	import { presenceState } from '$frontend/lib/stores/core/presence.svelte';
+	import { presenceState, getProjectStatusColor } from '$frontend/lib/stores/core/presence.svelte';
 	import type { Project } from '$shared/types/database/schema';
 	import { debug } from '$shared/utils/logger';
 	import FolderBrowser from '$frontend/lib/components/common/FolderBrowser.svelte';
@@ -110,18 +110,7 @@
 		}
 	}
 
-	// Get status color from presence data (single source of truth from backend)
-	// Shows real-time status for ALL projects, not just the active one.
-	// Uses backend-computed isWaitingInput so background sessions are accurate
-	// even when the frontend hasn't received their chat events.
-	function getStatusColor(projectId: string): string {
-		const status = presenceState.statuses.get(projectId);
-		if (!status?.streams) return 'bg-slate-500/30';
-		const activeStreams = status.streams.filter((s: any) => s.status === 'active');
-		if (activeStreams.length === 0) return 'bg-slate-500/30';
-		const hasWaitingInput = activeStreams.some((s: any) => s.isWaitingInput);
-		return hasWaitingInput ? 'bg-amber-500' : 'bg-emerald-500';
-	}
+	// Status color for project indicator — uses shared helper from presence store
 
 	// Close folder browser
 	function closeFolderBrowser() {
@@ -244,7 +233,7 @@
 							<div class="relative shrink-0">
 								<Icon name="lucide:folder" class="w-4 h-4" />
 								<span
-									class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-50 dark:border-slate-900/95 {getStatusColor(project.id ?? '')}"
+									class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-50 dark:border-slate-900/95 {getProjectStatusColor(project.id ?? '')}"
 								></span>
 							</div>
 
@@ -327,7 +316,7 @@
 					>
 						<span>{getProjectInitials(project.name)}</span>
 						<span
-							class="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-slate-50 dark:border-slate-900/95 {getStatusColor(project.id ?? '')}"
+							class="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-slate-50 dark:border-slate-900/95 {getProjectStatusColor(project.id ?? '')}"
 						></span>
 						{#if activeUserCount > 0}
 							<span
