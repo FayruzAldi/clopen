@@ -291,7 +291,7 @@
 			</footer>
 		{:else}
 			<!-- Collapsed State: Icon Buttons -->
-			<div class="flex-1 flex flex-col items-center gap-2 py-4 px-2">
+			<div class="flex flex-col items-center pt-4 px-2 shrink-0">
 				<button
 					type="button"
 					class="flex items-center justify-center w-9 h-9 bg-transparent border-none rounded-lg text-slate-500 cursor-pointer transition-all duration-150 relative hover:bg-violet-500/10 hover:text-slate-900 dark:hover:text-slate-100"
@@ -302,13 +302,15 @@
 				</button>
 
 				<div class="w-6 h-px bg-violet-500/10 my-1"></div>
+			</div>
 
-				{#each existingProjects.slice(0, 5) as project (project.id)}
+			<div class="flex-1 flex flex-col items-center gap-2 px-2 pb-4 min-h-0 overflow-y-auto">
+				{#each existingProjects as project (project.id)}
 					{@const projectStatus = presenceState.statuses.get(project.id ?? '')}
 					{@const activeUserCount = (projectStatus?.activeUsers || []).length}
 					<button
 						type="button"
-						class="flex items-center justify-center w-9 h-9 border-none rounded-lg cursor-pointer transition-all duration-150 relative font-semibold text-sm
+						class="flex items-center justify-center w-9 h-9 shrink-0 border-none rounded-lg cursor-pointer transition-all duration-150 relative font-semibold text-sm
 							{currentProjectId === project.id
 							? 'bg-violet-500/10 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300'
 							: 'bg-slate-200/50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-violet-500/10 hover:text-slate-900 dark:hover:text-slate-100'}"
