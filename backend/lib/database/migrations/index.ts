@@ -20,6 +20,7 @@ import * as migration018 from './018_create_claude_accounts_table';
 import * as migration019 from './019_add_claude_account_to_sessions';
 import * as migration020 from './020_add_snapshot_tree_hash';
 import * as migration021 from './021_drop_prompt_templates_table';
+import * as migration022 from './022_add_snapshot_changes_column';
 
 // Export all migrations in order
 export const migrations = [
@@ -148,6 +149,12 @@ export const migrations = [
 		description: migration021.description,
 		up: migration021.up,
 		down: migration021.down
+	},
+	{
+		id: '022',
+		description: migration022.description,
+		up: migration022.up,
+		down: migration022.down
 	}
 ];
 

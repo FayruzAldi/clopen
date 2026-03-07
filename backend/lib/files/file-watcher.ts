@@ -83,6 +83,36 @@ class FileWatcherManager {
 	private watchers = new Map<string, ProjectWatcher>();
 
 	/**
+	 * Per-project dirty file tracking for snapshot system.
+	 * Accumulates changed file relative paths between snapshot captures.
+	 */
+	private dirtyFiles = new Map<string, Set<string>>();
+
+	/**
+	 * Get dirty files accumulated since last clear for a project.
+	 */
+	getDirtyFiles(projectId: string): Set<string> {
+		return this.dirtyFiles.get(projectId) || new Set();
+	}
+
+	/**
+	 * Clear dirty files after snapshot capture.
+	 */
+	clearDirtyFiles(projectId: string): void {
+		this.dirtyFiles.delete(projectId);
+	}
+
+	/**
+	 * Track a file as dirty for snapshot purposes.
+	 */
+	private trackDirtyFile(projectId: string, relativePath: string): void {
+		if (!this.dirtyFiles.has(projectId)) {
+			this.dirtyFiles.set(projectId, new Set());
+		}
+		this.dirtyFiles.get(projectId)!.add(relativePath);
+	}
+
+	/**
 	 * Start watching a project directory
 	 */
 	async startWatching(projectId: string, projectPath: string): Promise<boolean> {
@@ -237,6 +267,10 @@ class FileWatcherManager {
 				changeType = 'deleted';
 			}
 		}
+
+		// Track dirty file for snapshot system
+		const relativePath = relative(projectPath, fullPath).replace(/\\/g, '/');
+		this.trackDirtyFile(projectId, relativePath);
 
 		// Create file change object
 		const fileChange: FileChange = {
