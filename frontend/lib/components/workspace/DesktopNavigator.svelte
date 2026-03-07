@@ -10,6 +10,7 @@
 	import { presenceState, getProjectStatusColor } from '$frontend/lib/stores/core/presence.svelte';
 	import type { Project } from '$shared/types/database/schema';
 	import { debug } from '$shared/utils/logger';
+	import { settings } from '$frontend/lib/stores/features/settings.svelte';
 	import FolderBrowser from '$frontend/lib/components/common/FolderBrowser.svelte';
 	import Dialog from '$frontend/lib/components/common/Dialog.svelte';
 	import ViewMenu from '$frontend/lib/components/workspace/ViewMenu.svelte';
@@ -30,7 +31,7 @@
 	const isCollapsed = $derived(workspaceState.navigatorCollapsed);
 	const currentProjectId = $derived(projectState.currentProject?.id);
 	const navigatorWidth = $derived(
-		workspaceState.navigatorCollapsed ? 48 : workspaceState.navigatorWidth
+		workspaceState.navigatorCollapsed ? 48 : Math.round(workspaceState.navigatorWidth * (settings.fontSize / 13))
 	);
 
 	const filteredProjects = $derived(() => {

@@ -217,7 +217,7 @@
 				theme: isDark ? 'diff-dark' : 'diff-light',
 				readOnly: true,
 				renderSideBySide: true,
-				renderSideBySideInlineBreakpoint: 600,
+				renderSideBySideInlineBreakpoint: Math.round(600 * (settings.fontSize / 13)),
 				minimap: { enabled: false },
 				scrollBeyondLastLine: false,
 				fontSize: Math.round(settings.fontSize * 0.9),
@@ -254,7 +254,8 @@
 		if (diffEditorInstance) {
 			diffEditorInstance.updateOptions({
 				fontSize: Math.round(size * 0.9),
-				lineHeight: Math.round(size * 0.9 * 1.5)
+				lineHeight: Math.round(size * 0.9 * 1.5),
+				renderSideBySideInlineBreakpoint: Math.round(600 * (size / 13))
 			});
 		}
 	});

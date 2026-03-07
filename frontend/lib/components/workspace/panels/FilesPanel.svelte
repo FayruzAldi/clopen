@@ -12,6 +12,7 @@
 	import Dialog from '$frontend/lib/components/common/Dialog.svelte';
 	import type { FileNode } from '$shared/types/filesystem';
 	import { debug } from '$shared/utils/logger';
+	import { settings } from '$frontend/lib/stores/features/settings.svelte';
 	import { onMount, onDestroy } from 'svelte';
 	import ws from '$frontend/lib/utils/ws';
 	import { showConfirm } from '$frontend/lib/stores/ui/dialog.svelte';
@@ -138,7 +139,7 @@
 	// Container width detection for 2-column layout
 	let containerRef = $state<HTMLDivElement | null>(null);
 	let containerWidth = $state(0);
-	const TWO_COLUMN_THRESHOLD = 600;
+	const TWO_COLUMN_THRESHOLD = $derived(Math.round(600 * (settings.fontSize / 13)));
 
 	// FileTree ref
 	let fileTreeRef = $state<any>(null);

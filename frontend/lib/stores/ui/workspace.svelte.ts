@@ -732,8 +732,9 @@ export function toggleNavigator(): void {
 	saveWorkspaceState();
 }
 
-export function setNavigatorWidth(width: number): void {
-	workspaceState.navigatorWidth = Math.max(180, Math.min(400, width));
+export function setNavigatorWidth(width: number, fontSize: number = 13): void {
+	const scale = fontSize / 13;
+	workspaceState.navigatorWidth = Math.max(Math.round(180 * scale), Math.min(Math.round(400 * scale), width));
 	saveWorkspaceState();
 }
 
