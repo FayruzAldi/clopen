@@ -131,7 +131,7 @@
 	// Container width for responsive layout (same threshold as Files: 800)
 	let containerRef = $state<HTMLDivElement | null>(null);
 	let containerWidth = $state(0);
-	const TWO_COLUMN_THRESHOLD = 800;
+	const TWO_COLUMN_THRESHOLD = 600;
 	const isTwoColumnMode = $derived(containerWidth >= TWO_COLUMN_THRESHOLD);
 
 	// Track last project for re-fetch
@@ -1504,7 +1504,7 @@
 				<!-- Left panel: Changes list (w-80 like Files panel tree) -->
 				<div
 					class={isTwoColumnMode
-						? 'w-80 flex-shrink-0 h-full overflow-hidden border-r border-slate-200 dark:border-slate-700 flex flex-col'
+						? 'w-72 flex-shrink-0 h-full overflow-hidden border-r border-slate-200 dark:border-slate-700 flex flex-col'
 						: (viewMode === 'list' ? 'w-full h-full overflow-hidden flex flex-col' : 'hidden')}
 				>
 					{@render changesList()}

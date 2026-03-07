@@ -217,6 +217,7 @@
 				theme: isDark ? 'diff-dark' : 'diff-light',
 				readOnly: true,
 				renderSideBySide: true,
+				renderSideBySideInlineBreakpoint: 600,
 				minimap: { enabled: false },
 				scrollBeyondLastLine: false,
 				fontSize: Math.round(settings.fontSize * 0.9),
