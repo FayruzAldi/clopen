@@ -219,8 +219,8 @@
 				renderSideBySide: true,
 				minimap: { enabled: false },
 				scrollBeyondLastLine: false,
-				fontSize: settings.fontSize,
-				lineHeight: Math.round(settings.fontSize * 1.6),
+				fontSize: Math.round(settings.fontSize * 0.9),
+				lineHeight: Math.round(settings.fontSize * 0.9 * 1.5),
 				renderOverviewRuler: false,
 				enableSplitViewResizing: true,
 				automaticLayout: true,
@@ -251,7 +251,10 @@
 	$effect(() => {
 		const size = settings.fontSize;
 		if (diffEditorInstance) {
-			diffEditorInstance.updateOptions({ fontSize: size, lineHeight: Math.round(size * 1.6) });
+			diffEditorInstance.updateOptions({
+				fontSize: Math.round(size * 0.9),
+				lineHeight: Math.round(size * 0.9 * 1.5)
+			});
 		}
 	});
 

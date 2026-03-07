@@ -376,8 +376,8 @@
 
 	const createEditorOptions: (value: string, lang: string, theme: string) => editor.IStandaloneEditorConstructionOptions = (value, lang, theme) => ({
 		...EDITOR_CONFIG,
-		fontSize: settings.fontSize,
-		lineHeight: Math.round(settings.fontSize * 1.5),
+		fontSize: Math.round(settings.fontSize * 0.9),
+		lineHeight: Math.round(settings.fontSize * 0.9 * 1.5),
 		value,
 		language: lang,
 		theme,
@@ -479,7 +479,10 @@
 	$effect(() => {
 		const size = settings.fontSize;
 		if (monacoEditor && isInitialized) {
-			monacoEditor.updateOptions({ fontSize: size, lineHeight: Math.round(size * 1.5) });
+			monacoEditor.updateOptions({
+				fontSize: Math.round(size * 0.9),
+				lineHeight: Math.round(size * 0.9 * 1.5) 
+			});
 		}
 	});
 
