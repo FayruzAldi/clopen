@@ -12,4 +12,6 @@ export interface AppSettings {
 	layoutPresetVisibility: Record<string, boolean>;
 	/** Restrict folder browser to only these base paths. Empty = no restriction. */
 	allowedBasePaths: string[];
+	/** Base font size in pixels (10–20). Default: 13. */
+	fontSize: number;
 }

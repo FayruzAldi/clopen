@@ -3,6 +3,7 @@
 	import loader from '@monaco-editor/loader';
 	import type { editor } from 'monaco-editor';
 	import { themeStore } from '$frontend/lib/stores/ui/theme.svelte';
+	import { settings } from '$frontend/lib/stores/features/settings.svelte';
 	import { debug } from '$shared/utils/logger';
 
 	interface Props {
@@ -375,6 +376,8 @@
 
 	const createEditorOptions: (value: string, lang: string, theme: string) => editor.IStandaloneEditorConstructionOptions = (value, lang, theme) => ({
 		...EDITOR_CONFIG,
+		fontSize: Math.round(settings.fontSize * 0.9),
+		lineHeight: Math.round(settings.fontSize * 0.9 * 1.5),
 		value,
 		language: lang,
 		theme,
@@ -469,6 +472,17 @@
 	$effect(() => {
 		if (monacoEditor) {
 			monacoEditor.updateOptions({ readOnly: readonly });
+		}
+	});
+
+	// Update font size when setting changes
+	$effect(() => {
+		const size = settings.fontSize;
+		if (monacoEditor && isInitialized) {
+			monacoEditor.updateOptions({
+				fontSize: Math.round(size * 0.9),
+				lineHeight: Math.round(size * 0.9 * 1.5) 
+			});
 		}
 	});
 

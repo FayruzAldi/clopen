@@ -513,7 +513,7 @@ export const workspaceState = $state<WorkspaceState>({
 	layout: defaultPreset.layout,
 	activePresetId: 'main-stack',
 	navigatorCollapsed: false,
-	navigatorWidth: 220,
+	navigatorWidth: 200,
 	activeMobilePanel: 'chat'
 });
 
@@ -732,8 +732,9 @@ export function toggleNavigator(): void {
 	saveWorkspaceState();
 }
 
-export function setNavigatorWidth(width: number): void {
-	workspaceState.navigatorWidth = Math.max(200, Math.min(400, width));
+export function setNavigatorWidth(width: number, fontSize: number = 13): void {
+	const scale = fontSize / 13;
+	workspaceState.navigatorWidth = Math.max(Math.round(180 * scale), Math.min(Math.round(400 * scale), width));
 	saveWorkspaceState();
 }
 

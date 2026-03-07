@@ -5,6 +5,7 @@
 	import { projectState } from '$frontend/lib/stores/core/projects.svelte';
 	import { showError, showInfo } from '$frontend/lib/stores/ui/notification.svelte';
 	import { debug } from '$shared/utils/logger';
+	import { settings } from '$frontend/lib/stores/features/settings.svelte';
 	import ws from '$frontend/lib/utils/ws';
 	import { getFileIcon } from '$frontend/lib/utils/file-icon-mappings';
 	import { getGitStatusLabel, getGitStatusColor } from '$frontend/lib/utils/git-status';
@@ -131,7 +132,7 @@
 	// Container width for responsive layout (same threshold as Files: 800)
 	let containerRef = $state<HTMLDivElement | null>(null);
 	let containerWidth = $state(0);
-	const TWO_COLUMN_THRESHOLD = 800;
+	const TWO_COLUMN_THRESHOLD = $derived(Math.round(600 * (settings.fontSize / 13)));
 	const isTwoColumnMode = $derived(containerWidth >= TWO_COLUMN_THRESHOLD);
 
 	// Track last project for re-fetch
@@ -1504,7 +1505,7 @@
 				<!-- Left panel: Changes list (w-80 like Files panel tree) -->
 				<div
 					class={isTwoColumnMode
-						? 'w-80 flex-shrink-0 h-full overflow-hidden border-r border-slate-200 dark:border-slate-700 flex flex-col'
+						? 'w-72 flex-shrink-0 h-full overflow-hidden border-r border-slate-200 dark:border-slate-700 flex flex-col'
 						: (viewMode === 'list' ? 'w-full h-full overflow-hidden flex flex-col' : 'hidden')}
 				>
 					{@render changesList()}

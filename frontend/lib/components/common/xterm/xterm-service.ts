@@ -180,6 +180,15 @@ export class XTermService {
 	}
 
 	/**
+	 * Update terminal font size and refit to container
+	 */
+	updateFontSize(size: number, sessionId?: string): void {
+		if (!this.terminal) return;
+		this.terminal.options.fontSize = size;
+		this.fit(sessionId);
+	}
+
+	/**
 	 * Show prompt (compatibility method - not needed in interactive mode)
 	 */
 	showPrompt(): void {

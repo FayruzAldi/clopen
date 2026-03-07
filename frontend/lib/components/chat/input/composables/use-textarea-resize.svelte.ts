@@ -1,5 +1,7 @@
 export function useTextareaResize() {
 	// Auto-resize textarea with proper single-line reset
+	const MAX_HEIGHT_PX = 22.5 * 16; // 360px = 22.5rem
+
 	function adjustTextareaHeight(
 		textareaElement: HTMLTextAreaElement | undefined,
 		messageText: string
@@ -12,6 +14,7 @@ export function useTextareaResize() {
 			if (!messageText || !messageText.trim()) {
 				// Force single line height
 				textareaElement.style.height = 'auto';
+				textareaElement.style.overflowY = 'hidden';
 				return;
 			}
 
@@ -22,8 +25,15 @@ export function useTextareaResize() {
 			const paddingBottom = parseInt(getComputedStyle(textareaElement).paddingBottom) || 0;
 			const minHeight = lineHeight + paddingTop + paddingBottom;
 
-			// Set height to content height, but at least minimum height
-			textareaElement.style.height = Math.max(minHeight, scrollHeight) / 16 + 'rem';
+			const newHeight = Math.max(minHeight, scrollHeight);
+
+			if (newHeight >= MAX_HEIGHT_PX) {
+				textareaElement.style.height = '22.5rem';
+				textareaElement.style.overflowY = 'auto';
+			} else {
+				textareaElement.style.height = newHeight / 16 + 'rem';
+				textareaElement.style.overflowY = 'hidden';
+			}
 		}
 	}
 

@@ -11,6 +11,7 @@
 	import { terminalStore } from '$frontend/lib/stores/features/terminal.svelte';
 	import { backgroundTerminalService } from '$frontend/lib/services/terminal/background';
 	import { terminalService } from '$frontend/lib/services/terminal';
+	import { settings } from '$frontend/lib/stores/features/settings.svelte';
 	
 	// Import CSS directly - Vite will handle it properly
 	import 'xterm/css/xterm.css';
@@ -397,6 +398,14 @@
 		
 		// Update last state for next comparison
 		lastExecutingState = sessionExecuting;
+	});
+
+	// Reactively update terminal font size when setting changes
+	$effect(() => {
+		const size = settings.fontSize;
+		if (isInitialized) {
+			xtermService.updateFontSize(size, session?.id);
+		}
 	});
 
 	// Save terminal buffer before switching away
