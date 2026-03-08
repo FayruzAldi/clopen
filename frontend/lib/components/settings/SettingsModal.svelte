@@ -100,7 +100,7 @@
 						onclick={() => (isMobileMenuOpen = !isMobileMenuOpen)}
 						aria-label="Toggle menu"
 					>
-						<Icon name={isMobileMenuOpen ? 'lucide:x' : 'lucide:menu'} class="w-5 h-5" />
+						<Icon name={isMobileMenuOpen ? 'lucide:arrow-left' : 'lucide:menu'} class="w-5 h-5" />
 					</button>
 					<h2
 						id="settings-title"
