@@ -138,7 +138,7 @@
 
 <!-- Main Workspace Layout -->
 <div
-	class="h-screen w-screen overflow-hidden {isMobile ? 'bg-white/90 dark:bg-slate-900/98' : 'bg-slate-50 dark:bg-slate-900/70'} text-slate-900 dark:text-slate-100 font-sans"
+	class="h-full w-full overflow-hidden {isMobile ? 'bg-white/90 dark:bg-slate-900/98' : 'bg-slate-50 dark:bg-slate-900/70'} text-slate-900 dark:text-slate-100 font-sans"
 >
 	<!-- Skip link for accessibility -->
 	<a

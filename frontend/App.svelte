@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import WorkspaceLayout from '$frontend/lib/components/workspace/WorkspaceLayout.svelte';
+	import ConnectionBanner from '$frontend/lib/components/common/ConnectionBanner.svelte';
 	import { backgroundTerminalService } from '$frontend/lib/services/terminal/background';
 	import { initializeMCPPreview } from '$frontend/lib/services/preview';
 	import { globalStreamMonitor } from '$frontend/lib/services/notification/global-stream-monitor';
@@ -30,9 +31,15 @@
 	});
 </script>
 
-<WorkspaceLayout>
-	{#snippet children()}
-		<!-- Main content will be here -->
-		<!-- TODO: Add SPA router in Phase 3 if needed -->
-	{/snippet}
-</WorkspaceLayout>
+<div class="flex flex-col h-screen w-screen overflow-hidden">
+	<ConnectionBanner />
+
+	<div class="flex-1 min-h-0">
+		<WorkspaceLayout>
+			{#snippet children()}
+				<!-- Main content will be here -->
+				<!-- TODO: Add SPA router in Phase 3 if needed -->
+			{/snippet}
+		</WorkspaceLayout>
+	</div>
+</div>
