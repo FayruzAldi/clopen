@@ -13,6 +13,7 @@ import { buildMetadataFromTransport } from '$shared/utils/message-formatter';
 import ws from '$frontend/lib/utils/ws';
 import { projectState } from './projects.svelte';
 import { setupEditModeListener, restoreEditMode } from '$frontend/lib/stores/ui/edit-mode.svelte';
+import { markSessionUnread, markSessionRead } from '$frontend/lib/stores/core/app.svelte';
 import { debug } from '$shared/utils/logger';
 
 interface SessionState {
@@ -55,6 +56,11 @@ export function messageCount() {
 export async function setCurrentSession(session: ChatSession | null, skipLoadMessages: boolean = false) {
 	const previousSessionId = sessionState.currentSession?.id;
 	sessionState.currentSession = session;
+
+	// Clear unread status when viewing a session
+	if (session) {
+		markSessionRead(session.id);
+	}
 
 	// Leave previous chat session room
 	if (previousSessionId && previousSessionId !== session?.id) {
@@ -344,6 +350,11 @@ function setupCollaborativeListeners() {
 			sessionState.sessions.push(session);
 		} else {
 			sessionState.sessions[existingIndex] = session;
+		}
+
+		// Mark as unread if it's not the current session
+		if (session.id !== sessionState.currentSession?.id) {
+			markSessionUnread(session.id, session.project_id);
 		}
 	});
 

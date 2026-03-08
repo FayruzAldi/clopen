@@ -50,6 +50,9 @@ interface AppState {
 	// Per-session process states (source of truth for multi-session support)
 	sessionStates: Record<string, SessionProcessState>;
 
+	// Unread sessions — maps session ID → project ID for sessions with new activity
+	unreadSessions: Map<string, string>;
+
 	// Page Information
 	pageInfo: PageInfo;
 
@@ -70,6 +73,9 @@ export const appState = $state<AppState>({
 
 	// Per-session process states
 	sessionStates: {},
+
+	// Unread sessions (sessionId → projectId)
+	unreadSessions: new Map<string, string>(),
 
 	// Page Information
 	pageInfo: {
@@ -127,6 +133,47 @@ export function syncGlobalStateFromSession(sessionId: string): void {
  */
 export function clearSessionProcessState(sessionId: string): void {
 	delete appState.sessionStates[sessionId];
+}
+
+// ========================================
+// UNREAD SESSION MANAGEMENT
+// ========================================
+
+/**
+ * Mark a session as unread (has new activity the user hasn't seen).
+ */
+export function markSessionUnread(sessionId: string, projectId: string): void {
+	const next = new Map(appState.unreadSessions);
+	next.set(sessionId, projectId);
+	appState.unreadSessions = next;
+}
+
+/**
+ * Mark a session as read (user has viewed it).
+ */
+export function markSessionRead(sessionId: string): void {
+	if (appState.unreadSessions.has(sessionId)) {
+		const next = new Map(appState.unreadSessions);
+		next.delete(sessionId);
+		appState.unreadSessions = next;
+	}
+}
+
+/**
+ * Check if a session is unread.
+ */
+export function isSessionUnread(sessionId: string): boolean {
+	return appState.unreadSessions.has(sessionId);
+}
+
+/**
+ * Check if a project has any unread sessions.
+ */
+export function hasUnreadSessionsForProject(projectId: string): boolean {
+	for (const pId of appState.unreadSessions.values()) {
+		if (pId === projectId) return true;
+	}
+	return false;
 }
 
 // ========================================

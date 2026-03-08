@@ -12,7 +12,7 @@
 <script lang="ts">
 	import { sessionState, setCurrentSession, createNewChatSession, clearMessages, loadMessagesForSession } from '$frontend/lib/stores/core/sessions.svelte';
 	import { projectState } from '$frontend/lib/stores/core/projects.svelte';
-	import { appState } from '$frontend/lib/stores/core/app.svelte';
+	import { appState, isSessionUnread } from '$frontend/lib/stores/core/app.svelte';
 	import { presenceState, isSessionWaitingInput } from '$frontend/lib/stores/core/presence.svelte';
 	import { userStore } from '$frontend/lib/stores/features/user.svelte';
 	import { addNotification } from '$frontend/lib/stores/ui/notification.svelte';
@@ -294,7 +294,7 @@
 									>
 										<div class="flex-1 min-w-0">
 											<div class="flex items-center gap-1.5">
-												<span class="w-1.5 h-1.5 rounded-full shrink-0 {isStreaming ? (isSessionWaitingInput(session.id, projectState.currentProject?.id) ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500 animate-pulse') : isCurrent ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600'}"></span>
+												<span class="w-1.5 h-1.5 rounded-full shrink-0 {isStreaming ? (isSessionWaitingInput(session.id, projectState.currentProject?.id) ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500 animate-pulse') : isCurrent ? 'bg-green-500' : isSessionUnread(session.id) ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'}"></span>
 												<span class="text-sm font-medium truncate">{getSessionShortTitle(session)}</span>
 											</div>
 											<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">

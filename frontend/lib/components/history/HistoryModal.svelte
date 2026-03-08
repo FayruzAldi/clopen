@@ -11,6 +11,7 @@
 	import Modal from '$frontend/lib/components/common/Modal.svelte';
 	import Dialog from '$frontend/lib/components/common/Dialog.svelte';
 	import { presenceState, isSessionWaitingInput } from '$frontend/lib/stores/core/presence.svelte';
+	import { isSessionUnread } from '$frontend/lib/stores/core/app.svelte';
 	import { userStore } from '$frontend/lib/stores/features/user.svelte';
 	import { debug } from '$shared/utils/logger';
 
@@ -474,6 +475,10 @@
 								{#if streaming}
 									<span
 										class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 {isSessionWaitingInput(session.id, projectState.currentProject?.id) ? 'bg-amber-500' : 'bg-emerald-500'}"
+									></span>
+								{:else if isSessionUnread(session.id)}
+									<span
+										class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 bg-blue-500"
 									></span>
 								{:else}
 									<span

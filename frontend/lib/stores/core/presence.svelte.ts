@@ -9,7 +9,8 @@
 
 import { projectStatusService, type ProjectStatus } from '$frontend/lib/services/project/status.service';
 import { userStore } from '$frontend/lib/stores/features/user.svelte';
-import { appState } from '$frontend/lib/stores/core/app.svelte';
+import { appState, markSessionUnread, hasUnreadSessionsForProject } from '$frontend/lib/stores/core/app.svelte';
+import { sessionState } from '$frontend/lib/stores/core/sessions.svelte';
 
 // Shared reactive state
 export const presenceState = $state<{
@@ -30,6 +31,7 @@ export function initPresence() {
 
 	projectStatusService.onStatusUpdate((statuses) => {
 		const currentUserId = userStore.currentUser?.id;
+		const currentSessionId = sessionState.currentSession?.id;
 		const statusMap = new Map<string, ProjectStatus>();
 		statuses.forEach((status) => {
 			statusMap.set(status.projectId, {
@@ -38,6 +40,15 @@ export function initPresence() {
 					? status.activeUsers.filter((u) => u.userId !== currentUserId)
 					: status.activeUsers
 			});
+
+			// Mark non-current sessions with active streams as unread
+			if (status.streams) {
+				for (const stream of status.streams) {
+					if (stream.status === 'active' && stream.chatSessionId !== currentSessionId) {
+						markSessionUnread(stream.chatSessionId, status.projectId);
+					}
+				}
+			}
 		});
 		presenceState.statuses = statusMap;
 	});
@@ -84,27 +95,33 @@ export function isSessionWaitingInput(chatSessionId: string, projectId?: string)
 
 /**
  * Get the status indicator color for a project.
- * - Gray  (bg-slate-500/30) : no active streams (idle)
  * Priority (highest wins when multiple sessions exist):
  * - Green (bg-emerald-500)  : at least one stream actively processing
  * - Amber (bg-amber-500)    : all active streams waiting for user input
- * - Gray  (bg-slate-500/30) : no active streams (idle)
+ * - Blue  (bg-blue-500)     : session(s) with unread activity
+ * - Gray  (bg-slate-500/30) : idle
  *
  * Merges backend presence with frontend app state for accuracy.
  */
 export function getProjectStatusColor(projectId: string): string {
 	const status = presenceState.statuses.get(projectId);
-	if (!status?.streams) return 'bg-slate-500/30';
 
-	const activeStreams = status.streams.filter((s: any) => s.status === 'active');
-	if (activeStreams.length === 0) return 'bg-slate-500/30';
+	const activeStreams = status?.streams?.filter((s: any) => s.status === 'active') ?? [];
 
-	// Green wins: at least one stream is actively processing (not waiting)
-	const hasProcessing = activeStreams.some((s: any) =>
-		!s.isWaitingInput && !appState.sessionStates[s.chatSessionId]?.isWaitingInput
-	);
-	if (hasProcessing) return 'bg-emerald-500';
+	if (activeStreams.length > 0) {
+		// Green wins: at least one stream is actively processing (not waiting)
+		const hasProcessing = activeStreams.some((s: any) =>
+			!s.isWaitingInput && !appState.sessionStates[s.chatSessionId]?.isWaitingInput
+		);
+		if (hasProcessing) return 'bg-emerald-500';
 
-	// All active streams are waiting for input
-	return 'bg-amber-500';
+		// All active streams are waiting for input
+		return 'bg-amber-500';
+	}
+
+	// Check for unread sessions in this project
+	if (hasUnreadSessionsForProject(projectId)) return 'bg-blue-500';
+
+	return 'bg-slate-500/30';
 }
+
