@@ -33,7 +33,8 @@ const defaultSettings: AppSettings = {
 	pushNotifications: false,
 	layoutPresetVisibility: createDefaultPresetVisibility(),
 	allowedBasePaths: [],
-	fontSize: 13
+	fontSize: 13,
+	autoUpdate: false
 };
 
 // Create and export reactive settings state directly (starts with defaults)
