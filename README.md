@@ -39,10 +39,16 @@ bun add -g @myrialabs/clopen
 ### Update
 
 ```bash
+clopen update
+```
+
+Or manually via Bun:
+
+```bash
 bun add -g @myrialabs/clopen
 ```
 
-Same command as installation — Bun will update to the latest version.
+You can also update from the **Settings > General > Updates** section in the web UI.
 
 ### Usage
 
