@@ -519,7 +519,7 @@ This will restore your files to this point within this session.`
 					<!-- Diff View -->
 					{#if expandedDiffs.has(conflict.filepath) && conflict.restoreContent && conflict.currentContent}
 						<div class="mb-3">
-							<div class="flex items-center gap-3 mb-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+							<div class="flex items-center gap-3 mb-1.5 text-3xs text-slate-500 dark:text-slate-400">
 								<span class="flex items-center gap-1">
 									<span class="inline-block w-2 h-2 rounded-sm bg-red-400"></span>
 									Restore version

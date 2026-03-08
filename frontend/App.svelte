@@ -1,11 +1,13 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import WorkspaceLayout from '$frontend/lib/components/workspace/WorkspaceLayout.svelte';
 	import ConnectionBanner from '$frontend/lib/components/common/ConnectionBanner.svelte';
+	import UpdateBanner from '$frontend/lib/components/common/UpdateBanner.svelte';
 	import { backgroundTerminalService } from '$frontend/lib/services/terminal/background';
 	import { initializeMCPPreview } from '$frontend/lib/services/preview';
 	import { globalStreamMonitor } from '$frontend/lib/services/notification/global-stream-monitor';
 	import { tunnelStore } from '$frontend/lib/stores/features/tunnel.svelte';
+	import { startUpdateChecker, stopUpdateChecker } from '$frontend/lib/stores/ui/update.svelte';
 
 	// NOTE: In Phase 3, we'll need to handle routing for SPA
 	// For now, we'll just render the main workspace
@@ -28,11 +30,19 @@
 
 		// Restore tunnel status from server
 		tunnelStore.checkStatus();
+
+		// Start periodic update checker
+		startUpdateChecker();
+	});
+
+	onDestroy(() => {
+		stopUpdateChecker();
 	});
 </script>
 
 <div class="flex flex-col h-dvh w-screen overflow-hidden">
 	<ConnectionBanner />
+	<UpdateBanner />
 
 	<div class="flex-1 min-h-0">
 		<WorkspaceLayout>

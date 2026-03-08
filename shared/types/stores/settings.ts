@@ -14,4 +14,6 @@ export interface AppSettings {
 	allowedBasePaths: string[];
 	/** Base font size in pixels (10–20). Default: 13. */
 	fontSize: number;
+	/** Automatically update to the latest version when available. Default: false. */
+	autoUpdate: boolean;
 }
