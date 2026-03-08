@@ -306,11 +306,11 @@ export function getRecentSessions(limit: number = 10): ChatSession[] {
  * Reload sessions for the current project from the server.
  * Called when the user switches projects so session list stays in sync.
  */
-export async function reloadSessionsForProject() {
+export async function reloadSessionsForProject(): Promise<string | null> {
 	try {
 		const response = await ws.http('sessions:list');
 		if (response) {
-			const { sessions } = response;
+			const { sessions, currentSessionId } = response;
 			// Merge: keep sessions from other projects, replace sessions for current project
 			const currentProjectId = projectState.currentProject?.id;
 			if (currentProjectId) {
@@ -321,10 +321,12 @@ export async function reloadSessionsForProject() {
 			} else {
 				sessionState.sessions = sessions;
 			}
+			return currentSessionId || null;
 		}
 	} catch (error) {
 		debug.error('session', 'Error reloading sessions:', error);
 	}
+	return null;
 }
 
 // ========================================
