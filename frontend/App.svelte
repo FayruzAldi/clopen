@@ -31,7 +31,7 @@
 	});
 </script>
 
-<div class="flex flex-col h-screen w-screen overflow-hidden">
+<div class="flex flex-col h-dvh w-screen overflow-hidden">
 	<ConnectionBanner />
 
 	<div class="flex-1 min-h-0">
