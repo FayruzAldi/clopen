@@ -38,6 +38,11 @@ const BINARY_ACTIONS = new Set<string>([
 // ============================================================================
 
 /**
+ * Connection status for external consumers
+ */
+export type WSConnectionStatus = 'connected' | 'disconnected' | 'reconnecting';
+
+/**
  * WebSocket client options
  */
 export interface WSClientOptions {
@@ -49,6 +54,8 @@ export interface WSClientOptions {
 	reconnectDelay?: number;
 	/** Maximum reconnect delay in ms */
 	maxReconnectDelay?: number;
+	/** Callback when connection status changes */
+	onStatusChange?: (status: WSConnectionStatus, reconnectAttempts: number) => void;
 }
 
 // ============================================================================
@@ -197,7 +204,7 @@ function decodeBinaryMessage(buffer: ArrayBuffer): { action: string; payload: an
 export class WSClient<TAPI extends { client: any; server: any }> {
 	private ws: WebSocket | null = null;
 	private url: string;
-	private options: Required<WSClientOptions>;
+	private options: Required<Omit<WSClientOptions, 'onStatusChange'>> & Pick<WSClientOptions, 'onStatusChange'>;
 	private reconnectAttempts = 0;
 	private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 	private listeners = new Map<string, Set<(payload: any) => void>>();
@@ -226,7 +233,8 @@ export class WSClient<TAPI extends { client: any; server: any }> {
 			autoReconnect: options.autoReconnect ?? true,
 			maxReconnectAttempts: options.maxReconnectAttempts ?? 5,
 			reconnectDelay: options.reconnectDelay ?? 1000,
-			maxReconnectDelay: options.maxReconnectDelay ?? 30000
+			maxReconnectDelay: options.maxReconnectDelay ?? 30000,
+			onStatusChange: options.onStatusChange ?? undefined
 		};
 
 		this.connect();
@@ -262,6 +270,7 @@ export class WSClient<TAPI extends { client: any; server: any }> {
 				debug.log('websocket', 'Connected');
 				this.isConnected = true;
 				this.reconnectAttempts = 0;
+				this.options.onStatusChange?.('connected', 0);
 
 				// Sync context on reconnection - MUST await before flushing queue
 				if (this.context.userId || this.context.projectId) {
@@ -320,7 +329,10 @@ export class WSClient<TAPI extends { client: any; server: any }> {
 
 				// Auto-reconnect
 				if (this.shouldReconnect && this.options.autoReconnect) {
+					this.options.onStatusChange?.('reconnecting', this.reconnectAttempts);
 					this.scheduleReconnect();
+				} else {
+					this.options.onStatusChange?.('disconnected', this.reconnectAttempts);
 				}
 			};
 		} catch (err) {
@@ -389,6 +401,7 @@ export class WSClient<TAPI extends { client: any; server: any }> {
 	private scheduleReconnect(): void {
 		if (this.options.maxReconnectAttempts > 0 && this.reconnectAttempts >= this.options.maxReconnectAttempts) {
 			debug.error('websocket', 'Max reconnect attempts reached');
+			this.options.onStatusChange?.('disconnected', this.reconnectAttempts);
 			return;
 		}
 
@@ -399,6 +412,7 @@ export class WSClient<TAPI extends { client: any; server: any }> {
 		);
 
 		debug.log('websocket', `Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+		this.options.onStatusChange?.('reconnecting', this.reconnectAttempts);
 
 		this.reconnectTimeout = setTimeout(() => {
 			this.connect();
