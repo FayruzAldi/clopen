@@ -21,6 +21,7 @@ import * as migration019 from './019_add_claude_account_to_sessions';
 import * as migration020 from './020_add_snapshot_tree_hash';
 import * as migration021 from './021_drop_prompt_templates_table';
 import * as migration022 from './022_add_snapshot_changes_column';
+import * as migration023 from './023_create_user_unread_sessions_table';
 
 // Export all migrations in order
 export const migrations = [
@@ -155,6 +156,12 @@ export const migrations = [
 		description: migration022.description,
 		up: migration022.up,
 		down: migration022.down
+	},
+	{
+		id: '023',
+		description: migration023.description,
+		up: migration023.up,
+		down: migration023.down
 	}
 ];
 

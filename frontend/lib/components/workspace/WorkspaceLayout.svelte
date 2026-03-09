@@ -8,7 +8,7 @@
 		workspaceState,
 		initializeWorkspace,
 	} from '$frontend/lib/stores/ui/workspace.svelte';
-	import { appState, setAppLoading, setAppInitialized, restoreLastView } from '$frontend/lib/stores/core/app.svelte';
+	import { appState, setAppLoading, setAppInitialized, restoreLastView, restoreUnreadSessions } from '$frontend/lib/stores/core/app.svelte';
 	import { projectState } from '$frontend/lib/stores/core/projects.svelte';
 	import { sessionState } from '$frontend/lib/stores/core/sessions.svelte';
 
@@ -89,7 +89,7 @@
 
 			// Step 3: Restore user state from server
 			setProgress(30, 'Restoring state...');
-			let serverState: { currentProjectId: string | null; lastView: string | null; settings: any } | null = null;
+			let serverState: { currentProjectId: string | null; lastView: string | null; settings: any; unreadSessions: any } | null = null;
 			try {
 				serverState = await ws.http('user:restore-state', {});
 				debug.log('workspace', 'Server state restored:', serverState);
@@ -103,6 +103,7 @@
 				applyServerSettings(serverState.settings);
 			}
 			restoreLastView(serverState?.lastView);
+			restoreUnreadSessions(serverState?.unreadSessions);
 			initPresence();
 
 			// Step 5: Load projects (with server-restored currentProjectId)

@@ -267,5 +267,42 @@ export const sessionQueries = {
 			SET head_message_id = ?
 			WHERE session_id = ? AND branch_name = ?
 		`).run(newHeadMessageId, sessionId, branchName);
+	},
+
+	// ==================== PER-USER UNREAD SESSION TRACKING ====================
+
+	/**
+	 * Mark a session as unread for a specific user
+	 */
+	markUnread(userId: string, sessionId: string, projectId: string): void {
+		const db = getDatabase();
+		const now = new Date().toISOString();
+		db.prepare(`
+			INSERT OR IGNORE INTO user_unread_sessions (user_id, session_id, project_id, marked_at)
+			VALUES (?, ?, ?, ?)
+		`).run(userId, sessionId, projectId, now);
+	},
+
+	/**
+	 * Mark a session as read for a specific user
+	 */
+	markRead(userId: string, sessionId: string): void {
+		const db = getDatabase();
+		db.prepare(`
+			DELETE FROM user_unread_sessions
+			WHERE user_id = ? AND session_id = ?
+		`).run(userId, sessionId);
+	},
+
+	/**
+	 * Get all unread session IDs for a user within a project
+	 * Returns array of { sessionId, projectId }
+	 */
+	getUnreadSessions(userId: string, projectId: string): { session_id: string; project_id: string }[] {
+		const db = getDatabase();
+		return db.prepare(`
+			SELECT session_id, project_id FROM user_unread_sessions
+			WHERE user_id = ? AND project_id = ?
+		`).all(userId, projectId) as { session_id: string; project_id: string }[];
 	}
 };

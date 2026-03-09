@@ -13,7 +13,7 @@ import { buildMetadataFromTransport } from '$shared/utils/message-formatter';
 import ws from '$frontend/lib/utils/ws';
 import { projectState } from './projects.svelte';
 import { setupEditModeListener, restoreEditMode } from '$frontend/lib/stores/ui/edit-mode.svelte';
-import { markSessionUnread, markSessionRead } from '$frontend/lib/stores/core/app.svelte';
+import { markSessionUnread, markSessionRead, appState } from '$frontend/lib/stores/core/app.svelte';
 import { debug } from '$shared/utils/logger';
 
 interface SessionState {
@@ -236,8 +236,19 @@ export async function loadSessions() {
 		const response = await ws.http('sessions:list');
 
 		if (response) {
-			const { sessions, currentSessionId } = response;
+			const { sessions, currentSessionId, unreadSessionIds } = response;
 			sessionState.sessions = sessions;
+
+			// Restore unread session state from backend
+			debug.log('session', '[unread] loadSessions received unreadSessionIds:', unreadSessionIds);
+			if (unreadSessionIds && Array.isArray(unreadSessionIds) && unreadSessionIds.length > 0) {
+				const next = new Map(appState.unreadSessions);
+				for (const { sessionId, projectId } of unreadSessionIds) {
+					next.set(sessionId, projectId);
+				}
+				appState.unreadSessions = next;
+				debug.log('session', '[unread] Restored unread sessions:', Array.from(appState.unreadSessions.entries()));
+			}
 
 			// Auto-restore: find the active session for the current project
 			if (!sessionState.currentSession) {
@@ -310,7 +321,7 @@ export async function reloadSessionsForProject(): Promise<string | null> {
 	try {
 		const response = await ws.http('sessions:list');
 		if (response) {
-			const { sessions, currentSessionId } = response;
+			const { sessions, currentSessionId, unreadSessionIds } = response;
 			// Merge: keep sessions from other projects, replace sessions for current project
 			const currentProjectId = projectState.currentProject?.id;
 			if (currentProjectId) {
@@ -321,6 +332,16 @@ export async function reloadSessionsForProject(): Promise<string | null> {
 			} else {
 				sessionState.sessions = sessions;
 			}
+
+			// Restore unread session state from backend
+			if (unreadSessionIds && Array.isArray(unreadSessionIds)) {
+				const next = new Map(appState.unreadSessions);
+				for (const { sessionId, projectId } of unreadSessionIds) {
+					next.set(sessionId, projectId);
+				}
+				appState.unreadSessions = next;
+			}
+
 			return currentSessionId || null;
 		}
 	} catch (error) {
