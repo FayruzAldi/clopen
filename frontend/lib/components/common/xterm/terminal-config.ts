@@ -4,7 +4,7 @@
  * Centralized xterm.js configuration and utilities
  */
 
-import type { ITerminalOptions } from 'xterm';
+import type { ITerminalOptions } from '@xterm/xterm';
 
 // Terminal theme configuration
 export const terminalConfig: ITerminalOptions = {
@@ -40,7 +40,7 @@ export const terminalConfig: ITerminalOptions = {
 	convertEol: true,
 	scrollback: 1000,
 	tabStopWidth: 4,
-	allowProposedApi: false,
+	allowProposedApi: true,
 	altClickMovesCursor: true,
 	disableStdin: false, // ✅ ENABLED for interactive PTY mode - stdin forwards to backend
 	allowTransparency: false
