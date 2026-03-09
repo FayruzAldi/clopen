@@ -420,9 +420,9 @@
 
 <div class="relative flex flex-col h-full overflow-hidden">
 	<!-- Modern Header -->
-	<div class="px-5 py-3 border-b border-slate-200 dark:border-slate-700">
+	<div class="px-5 py-2.5 border-b border-slate-200 dark:border-slate-700">
 		<div class="flex items-start justify-between gap-2">
-			<div class="flex-1 min-w-0">
+			<div class="flex-1 min-w-0" title={projectState.currentProject?.path}>
 				<h3 class="text-sm font-bold text-slate-900 dark:text-slate-100">
 					{projectState.currentProject?.name}
 				</h3>
@@ -466,7 +466,7 @@
 	<div class="relative flex border-b border-slate-200 dark:border-slate-700">
 		<button
 			onclick={() => { searchVisible = false; }}
-			class="relative flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors {!searchVisible ? 'text-violet-600 dark:text-violet-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}"
+			class="relative flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors {!searchVisible ? 'text-violet-600 dark:text-violet-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}"
 		>
 			<Icon name="lucide:folder" class="w-3.5 h-3.5" />
 			Explorer
@@ -476,7 +476,7 @@
 		</button>
 		<button
 			onclick={switchToSearch}
-			class="relative flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors {searchVisible ? 'text-violet-600 dark:text-violet-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}"
+			class="relative flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors {searchVisible ? 'text-violet-600 dark:text-violet-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}"
 		>
 			<Icon name="lucide:search" class="w-3.5 h-3.5" />
 			Search
