@@ -32,7 +32,6 @@ export const updateState = $state<UpdateState>({
 });
 
 let checkInterval: ReturnType<typeof setInterval> | null = null;
-let successTimeout: ReturnType<typeof setTimeout> | null = null;
 
 /** Check for updates from npm registry */
 export async function checkForUpdate(): Promise<void> {
@@ -76,13 +75,6 @@ export async function runUpdate(): Promise<void> {
 		updateState.latestVersion = result.newVersion;
 
 		debug.log('server', 'Update completed successfully');
-
-		// Clear success message after 5 seconds
-		if (successTimeout) clearTimeout(successTimeout);
-		successTimeout = setTimeout(() => {
-			updateState.updateSuccess = false;
-			updateState.dismissed = true;
-		}, 5000);
 	} catch (err) {
 		updateState.error = err instanceof Error ? err.message : 'Update failed';
 		debug.error('server', 'Update failed:', err);
@@ -116,9 +108,5 @@ export function stopUpdateChecker(): void {
 	if (checkInterval) {
 		clearInterval(checkInterval);
 		checkInterval = null;
-	}
-	if (successTimeout) {
-		clearTimeout(successTimeout);
-		successTimeout = null;
 	}
 }
