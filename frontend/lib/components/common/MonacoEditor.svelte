@@ -58,9 +58,9 @@
 				indentGuide: '#21262d',
 				indentGuideActive: '#30363d',
 				ruler: '#21262d',
-				scrollbar: '#21262d60',
-				scrollbarHover: '#30363d80',
-				scrollbarActive: '#6e7681'
+				scrollbar: '#6e768140',
+				scrollbarHover: '#6e768180',
+				scrollbarActive: '#8b949e'
 			},
 			tokens: {
 				comment: '6A9955',
@@ -87,9 +87,9 @@
 				indentGuide: '#e3e3e3',
 				indentGuideActive: '#d3d3d3',
 				ruler: '#e3e3e3',
-				scrollbar: '#cccccc60',
-				scrollbarHover: '#999999a0',
-				scrollbarActive: '#666666'
+				scrollbar: '#92929240',
+				scrollbarHover: '#92929280',
+				scrollbarActive: '#555555'
 			},
 			tokens: {
 				comment: '008000',
