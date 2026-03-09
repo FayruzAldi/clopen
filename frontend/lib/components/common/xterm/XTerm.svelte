@@ -316,7 +316,9 @@
 	$effect(() => {
 		const size = settings.fontSize;
 		if (isInitialized) {
-			xtermService.updateFontSize(size, session?.id);
+			const fontSize = Math.round(size * 0.9);
+			const lineHeight = Math.round(size * 0.9);
+			xtermService.updateFontSize(fontSize, lineHeight, session?.id);
 		}
 	});
 

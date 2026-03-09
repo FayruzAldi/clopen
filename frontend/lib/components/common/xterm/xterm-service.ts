@@ -212,11 +212,12 @@ export class XTermService {
 	}
 
 	/**
-	 * Update terminal font size and refit to container
+	 * Update terminal font size, line height, and refit to container
 	 */
-	updateFontSize(size: number, sessionId?: string): void {
+	updateFontSize(size: number, lineHeight: number, sessionId?: string): void {
 		if (!this.terminal) return;
 		this.terminal.options.fontSize = size;
+		this.terminal.options.lineHeight = lineHeight / size;
 		this.fit(sessionId);
 	}
 
