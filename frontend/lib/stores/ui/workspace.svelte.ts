@@ -459,18 +459,18 @@ const defaultPanels: Record<PanelId, PanelConfig> = {
 		minimized: false,
 		order: 0
 	},
-	preview: {
-		id: 'preview',
-		title: 'Preview',
-		icon: 'lucide:globe',
-		visible: true,
-		minimized: false,
-		order: 1
-	},
 	files: {
 		id: 'files',
 		title: 'Files',
 		icon: 'lucide:folder',
+		visible: true,
+		minimized: false,
+		order: 1
+	},
+	git: {
+		id: 'git',
+		title: 'Source Control',
+		icon: 'lucide:git-branch',
 		visible: true,
 		minimized: false,
 		order: 2
@@ -483,10 +483,10 @@ const defaultPanels: Record<PanelId, PanelConfig> = {
 		minimized: false,
 		order: 3
 	},
-	git: {
-		id: 'git',
-		title: 'Source Control',
-		icon: 'lucide:git-branch',
+	preview: {
+		id: 'preview',
+		title: 'Preview',
+		icon: 'lucide:globe',
 		visible: true,
 		minimized: false,
 		order: 4
@@ -497,8 +497,8 @@ export const PANEL_OPTIONS: { id: PanelId; title: string; icon: IconName }[] = [
 	{ id: 'chat', title: 'AI Assistant', icon: 'lucide:bot' },
 	{ id: 'files', title: 'Files', icon: 'lucide:folder' },
 	{ id: 'git', title: 'Source Control', icon: 'lucide:git-branch' },
-	{ id: 'preview', title: 'Preview', icon: 'lucide:globe' },
-	{ id: 'terminal', title: 'Terminal', icon: 'lucide:terminal' }
+	{ id: 'terminal', title: 'Terminal', icon: 'lucide:terminal' },
+	{ id: 'preview', title: 'Preview', icon: 'lucide:globe' }
 ];
 
 // Default: Main + Stack layout
