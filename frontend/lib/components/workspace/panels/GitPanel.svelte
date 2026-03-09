@@ -1110,7 +1110,7 @@
 
 <!-- View tabs snippet (always visible, even in single-column diff mode) -->
 {#snippet viewTabBar()}
-	<div class="relative flex border-b border-slate-200 dark:border-slate-700 mb-2">
+	<div class="relative flex border-b border-slate-200 dark:border-slate-700">
 		{#each viewTabs as tab (tab.id)}
 			{@const isActive = activeView === tab.id}
 			<button
@@ -1194,7 +1194,7 @@
 		/>
 	{:else if activeView === 'stash'}
 		<!-- Stash View -->
-		<div class="flex-1 overflow-y-auto">
+		<div class="flex-1 overflow-y-auto pt-2">
 			<!-- Stash save button/form -->
 			<div class="px-2 pb-2">
 				{#if showStashSaveForm}
@@ -1278,7 +1278,7 @@
 		</div>
 	{:else if activeView === 'tags'}
 		<!-- Tags View -->
-		<div class="flex-1 overflow-y-auto">
+		<div class="flex-1 overflow-y-auto pt-2">
 			<!-- Create tag button/form -->
 			<div class="px-2 pb-2">
 				{#if showCreateTagForm}

@@ -283,6 +283,7 @@ export class GitService {
 
 		const args = [
 			'log',
+			'--topo-order',
 			`--format=${format}`,
 			`--max-count=${limit + 1}`, // +1 to check if there are more
 			`--skip=${skip}`
