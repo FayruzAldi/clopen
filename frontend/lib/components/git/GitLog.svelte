@@ -14,6 +14,25 @@
 	const { commits, isLoading, hasMore, onLoadMore, onViewCommit }: Props = $props();
 
 	let selectedHash = $state('');
+	let sentinelEl = $state<HTMLDivElement | null>(null);
+
+	// Infinite scroll: auto load more when sentinel is visible
+	$effect(() => {
+		const el = sentinelEl;
+		if (!el || !hasMore) return;
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries[0]?.isIntersecting && hasMore && !isLoading) {
+					onLoadMore();
+				}
+			},
+			{ rootMargin: '100px' }
+		);
+
+		observer.observe(el);
+		return () => observer.disconnect();
+	});
 
 	// ========================
 	// Git Graph Computation
@@ -325,7 +344,7 @@
 					<div class="flex-1 min-w-0 px-1.5 py-0.5 flex flex-col justify-center overflow-hidden">
 						<!-- Line 1: Message + Date -->
 						<div class="flex items-center gap-2">
-							<p class="flex-1 min-w-0 text-sm text-slate-900 dark:text-slate-100 leading-tight truncate">
+							<p class="flex-1 min-w-0 text-sm text-slate-900 dark:text-slate-100 leading-tight truncate" title={commit.message}>
 								{commit.message}
 							</p>
 							<span class="text-3xs text-slate-400 shrink-0">{formatDate(commit.date)}</span>
@@ -349,7 +368,7 @@
 							<div class="flex items-center gap-1 mt-px overflow-hidden">
 								{#each commit.refs.slice(0, MAX_VISIBLE_REFS) as ref}
 									<span
-										class="text-3xs px-1 py-px rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0 truncate max-w-28"
+										class="text-3xs px-1 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0 truncate max-w-28"
 										title={ref}
 									>
 										{truncateRef(ref)}
@@ -369,17 +388,12 @@
 				</div>
 			{/each}
 
-			<!-- Load more -->
+			<!-- Infinite scroll sentinel -->
 			{#if hasMore}
-				<div class="flex justify-center py-3">
-					<button
-						type="button"
-						class="px-4 py-1.5 text-xs font-medium text-violet-600 bg-violet-500/10 rounded-md hover:bg-violet-500/20 transition-colors cursor-pointer border-none"
-						onclick={onLoadMore}
-						disabled={isLoading}
-					>
-						{isLoading ? 'Loading...' : 'Load More'}
-					</button>
+				<div bind:this={sentinelEl} class="flex justify-center py-3">
+					{#if isLoading}
+						<div class="w-4 h-4 border-2 border-slate-200 dark:border-slate-700 border-t-violet-600 rounded-full animate-spin"></div>
+					{/if}
 				</div>
 			{/if}
 		</div>
