@@ -76,21 +76,7 @@ export const timelineHandler = createRouter()
 		// 6. Get active children map from database
 		const activeChildrenMap = checkpointQueries.getAllActiveChildren(sessionId);
 
-		// 7. Sort checkpoints by timestamp for file stats calculation
-		const sortedCheckpoints = [...checkpoints].sort(
-			(a, b) => a.timestamp.localeCompare(b.timestamp)
-		);
-
-		// Build next-checkpoint timestamp map for stats
-		const nextTimestampMap = new Map<string, string>();
-		for (let i = 0; i < sortedCheckpoints.length; i++) {
-			const next = sortedCheckpoints[i + 1];
-			if (next) {
-				nextTimestampMap.set(sortedCheckpoints[i].id, next.timestamp);
-			}
-		}
-
-		// 8. Build response nodes
+		// 7. Build response nodes
 		const nodes: CheckpointNode[] = [];
 
 		for (const cp of checkpoints) {
@@ -107,9 +93,8 @@ export const timelineHandler = createRouter()
 				isOrphaned = isDescendant(cp.id, activeCheckpointId, childrenMap);
 			}
 
-			// File stats
-			const nextTimestamp = nextTimestampMap.get(cp.id);
-			const stats = getCheckpointFileStats(cp, allMessages, nextTimestamp);
+			// File stats from checkpoint's own snapshot
+			const stats = getCheckpointFileStats(cp);
 
 			const snapshot = snapshotQueries.getByMessageId(cp.id);
 

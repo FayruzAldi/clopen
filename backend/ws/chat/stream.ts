@@ -49,6 +49,14 @@ streamManager.on('stream:lifecycle', (event: { status: string; streamId: string;
 	broadcastPresence().catch(() => {});
 });
 
+// Notify project members when a snapshot is captured (so the timeline modal can refresh stats)
+streamManager.on('snapshot:captured', (event: { projectId: string; chatSessionId: string }) => {
+	const { projectId, chatSessionId } = event;
+	if (!projectId) return;
+
+	ws.emit.projectMembers(projectId, 'snapshot:captured', { projectId, chatSessionId });
+});
+
 // In-memory store for latest chat input state per chat session (keyed by chatSessionId)
 const chatSessionInputState = new Map<string, { text: string; senderId: string; attachments?: any[] }>();
 
@@ -789,4 +797,9 @@ export const streamHandler = createRouter()
 		chatSessionId: t.String(),
 		toolUseId: t.String(),
 		timestamp: t.String()
+	}))
+
+	.emit('snapshot:captured', t.Object({
+		projectId: t.String(),
+		chatSessionId: t.String()
 	}));

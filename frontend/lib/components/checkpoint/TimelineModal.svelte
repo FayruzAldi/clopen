@@ -13,6 +13,7 @@
 	import { snapshotService } from '$frontend/lib/services/snapshot/snapshot.service';
 	import type { RestoreConflict, ConflictResolution } from '$frontend/lib/services/snapshot/snapshot.service';
 	import type { TimelineResponse, GraphNode, GraphEdge, VersionGroup, AnimationState } from './timeline/types';
+	import ws from '$frontend/lib/utils/ws';
 
 	let {
 		isOpen = $bindable(false),
@@ -105,6 +106,19 @@
 			previousMessageCount = currentMessageCount;
 			loadTimeline();
 		}
+	});
+
+	// Reload timeline when a snapshot is captured (stats become available after stream ends)
+	$effect(() => {
+		if (!isOpen) return;
+
+		const unsub = ws.on('snapshot:captured', (data: { chatSessionId: string }) => {
+			if (data.chatSessionId === sessionId && !processingAction && !animationState.isAnimating) {
+				loadTimeline();
+			}
+		});
+
+		return unsub;
 	});
 
 	// Scroll to bottom on initial load

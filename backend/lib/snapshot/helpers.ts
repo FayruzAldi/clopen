@@ -335,62 +335,31 @@ export function isDescendant(
 }
 
 /**
- * Get file change stats for a checkpoint by looking at snapshots
- * between this checkpoint and the next.
+ * Get file change stats for a checkpoint.
+ * The snapshot associated with the checkpoint message itself contains the stats
+ * (file changes the assistant made in response to this user message).
  */
 export function getCheckpointFileStats(
-	checkpointMsg: DatabaseMessage,
-	allMessages: DatabaseMessage[],
-	nextCheckpointTimestamp?: string
+	checkpointMsg: DatabaseMessage
 ): { filesChanged: number; insertions: number; deletions: number } {
-	let filesChanged = 0;
-	let insertions = 0;
-	let deletions = 0;
-
-	const checkpointTimestamp = checkpointMsg.timestamp;
-
-	const laterMessages = allMessages
-		.filter(m => {
-			if (m.timestamp <= checkpointTimestamp) return false;
-			if (nextCheckpointTimestamp && m.timestamp >= nextCheckpointTimestamp) return false;
-			return true;
-		})
-		.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-
-	const allChangedFiles = new Set<string>();
-	const statsInRange: Array<{ files: number; ins: number; del: number }> = [];
-
-	for (const msg of laterMessages) {
-		try {
-			const sdkMsg = JSON.parse(msg.sdk_message) as SDKMessage;
-			if (sdkMsg.type !== 'user') continue;
-
-			const userSnapshot = snapshotQueries.getByMessageId(msg.id);
-			if (!userSnapshot) continue;
-
-			const fc = userSnapshot.files_changed || 0;
-			const ins = userSnapshot.insertions || 0;
-			const del = userSnapshot.deletions || 0;
-
-			if (fc > 0 || ins > 0 || del > 0) {
-				statsInRange.push({ files: fc, ins, del });
-			}
-
-			if (userSnapshot.delta_changes) {
-				try {
-					const delta = JSON.parse(userSnapshot.delta_changes);
-					if (delta.added) Object.keys(delta.added).forEach(f => allChangedFiles.add(f));
-					if (delta.modified) Object.keys(delta.modified).forEach(f => allChangedFiles.add(f));
-					if (delta.deleted && Array.isArray(delta.deleted)) delta.deleted.forEach((f: string) => allChangedFiles.add(f));
-				} catch { /* skip */ }
-			}
-		} catch { /* skip */ }
+	const snapshot = snapshotQueries.getByMessageId(checkpointMsg.id);
+	if (!snapshot) {
+		return { filesChanged: 0, insertions: 0, deletions: 0 };
 	}
 
-	if (statsInRange.length > 0) {
-		filesChanged = allChangedFiles.size > 0 ? allChangedFiles.size : Math.max(...statsInRange.map(s => s.files));
-		insertions = statsInRange.reduce((sum, s) => sum + s.ins, 0);
-		deletions = statsInRange.reduce((sum, s) => sum + s.del, 0);
+	let filesChanged = snapshot.files_changed || 0;
+	const insertions = snapshot.insertions || 0;
+	const deletions = snapshot.deletions || 0;
+
+	// Try to get a more accurate file count from session_changes
+	if (snapshot.session_changes) {
+		try {
+			const changes = JSON.parse(snapshot.session_changes as string);
+			const changeCount = Object.keys(changes).length;
+			if (changeCount > 0) {
+				filesChanged = changeCount;
+			}
+		} catch { /* use files_changed from DB */ }
 	}
 
 	return { filesChanged, insertions, deletions };
