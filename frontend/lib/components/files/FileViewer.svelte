@@ -85,33 +85,8 @@
 	// PDF blob URL
 	let pdfBlobUrl = $state<string | null>(null);
 
-	// Container ref for measuring height
-	let containerRef = $state<HTMLDivElement | null>(null);
-	let editorHeight = $state('0px'); // Default height
-
-	// Update editor height based on container
-	function updateEditorHeight() {
-		if (containerRef) {
-			const rect = containerRef.getBoundingClientRect();
-			// Get actual available height
-			const availableHeight = rect.height;
-			if (availableHeight > 0) {
-				const adjustedHeight = availableHeight;
-				editorHeight = `${Math.max(200, adjustedHeight)}px`;
-			} else {
-				const viewportHeight = window.innerHeight;
-				const estimatedHeight = viewportHeight - 200;
-				editorHeight = `${Math.max(400, estimatedHeight)}px`;
-			}
-		}
-	}
-
-	// Update height on mount and resize
+	// Keyboard shortcut for save
 	onMount(() => {
-		setTimeout(updateEditorHeight, 100);
-
-		window.addEventListener('resize', updateEditorHeight);
-
 		function handleKeyDown(e: KeyboardEvent) {
 			if ((e.ctrlKey || e.metaKey) && e.key === 's') {
 				e.preventDefault();
@@ -123,21 +98,7 @@
 
 		window.addEventListener('keydown', handleKeyDown);
 
-		if (containerRef && typeof ResizeObserver !== 'undefined') {
-			const resizeObserver = new ResizeObserver(() => {
-				updateEditorHeight();
-			});
-			resizeObserver.observe(containerRef);
-
-			return () => {
-				resizeObserver.disconnect();
-				window.removeEventListener('resize', updateEditorHeight);
-				window.removeEventListener('keydown', handleKeyDown);
-			};
-		}
-
 		return () => {
-			window.removeEventListener('resize', updateEditorHeight);
 			window.removeEventListener('keydown', handleKeyDown);
 		};
 	});
@@ -151,14 +112,6 @@
 			URL.revokeObjectURL(pdfBlobUrl);
 		}
 	});
-
-	// Update height when container ref changes
-	$effect(() => {
-		if (containerRef) {
-			updateEditorHeight();
-		}
-	});
-
 
 	// Load binary content (images, PDF) via WebSocket when file changes
 	$effect(() => {
@@ -577,38 +530,35 @@
 					</div>
 				{:else}
 					<!-- SVG code view (editable) -->
-					<div class="h-full flex flex-col" bind:this={containerRef}>
-						<div class="flex-1 bg-slate-50 dark:bg-slate-950 overflow-hidden">
-							<div class="h-full flex flex-col">
-								<div class="flex-1">
-									{#key themeKey}
-									<MonacoEditor
-										bind:this={monacoEditorRef}
-										bind:value={editableContent}
-										language="xml"
-										readonly={false}
-										onChange={handleContentChange}
-										height={editorHeight}
-										options={{
-											minimap: { enabled: false },
-											wordWrap: 'off',
-											renderWhitespace: 'none',
-											mouseWheelZoom: false
-										}}
-									/>
-									{/key}
-								</div>
-
-								{#if hasChanges}
-									<div class="flex-shrink-0 p-4 bg-amber-50 dark:bg-amber-900/30 border-t border-amber-200 dark:border-amber-800">
-										<div class="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
-											<Icon name="lucide:circle-alert" class="w-3 h-3" />
-											Unsaved changes
-										</div>
-									</div>
-								{/if}
+					<div class="h-full flex flex-col bg-slate-50 dark:bg-slate-950">
+						<div class="flex-1 relative overflow-hidden">
+							<div class="absolute inset-0">
+								{#key themeKey}
+								<MonacoEditor
+									bind:this={monacoEditorRef}
+									bind:value={editableContent}
+									language="xml"
+									readonly={false}
+									onChange={handleContentChange}
+									options={{
+										minimap: { enabled: false },
+										wordWrap: 'off',
+										renderWhitespace: 'none',
+										mouseWheelZoom: false
+									}}
+								/>
+								{/key}
 							</div>
 						</div>
+
+						{#if hasChanges}
+							<div class="flex-shrink-0 p-4 bg-amber-50 dark:bg-amber-900/30 border-t border-amber-200 dark:border-amber-800">
+								<div class="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+									<Icon name="lucide:circle-alert" class="w-3 h-3" />
+									Unsaved changes
+								</div>
+							</div>
+						{/if}
 					</div>
 				{/if}
 			{:else if isPdfFile(file.name)}
@@ -644,29 +594,23 @@
 				</div>
 			{:else}
 				<!-- Code content (always in edit mode) -->
-				<div class="h-full flex flex-col" bind:this={containerRef}>
-					<div class="flex-1 bg-slate-50 dark:bg-slate-950 overflow-hidden">
-						<div class="h-full flex flex-col">
-							<div class="flex-1">
-								{#key themeKey}
-								<MonacoEditor
-									bind:this={monacoEditorRef}
-									bind:value={editableContent}
-									language={getDetectedLanguage()}
-									readonly={false}
-									onChange={handleContentChange}
-									height={editorHeight}
-									options={{
-										minimap: { enabled: false },
-										wordWrap: wordWrap ? 'on' : 'off',
-										renderWhitespace: 'none',
-										mouseWheelZoom: false
-									}}
-								/>
-								{/key}
-							</div>
-
-						</div>
+				<div class="h-full relative bg-slate-50 dark:bg-slate-950">
+					<div class="absolute inset-0">
+						{#key themeKey}
+						<MonacoEditor
+							bind:this={monacoEditorRef}
+							bind:value={editableContent}
+							language={getDetectedLanguage()}
+							readonly={false}
+							onChange={handleContentChange}
+							options={{
+								minimap: { enabled: false },
+								wordWrap: wordWrap ? 'on' : 'off',
+								renderWhitespace: 'none',
+								mouseWheelZoom: false
+							}}
+						/>
+						{/key}
 					</div>
 				</div>
 			{/if}
