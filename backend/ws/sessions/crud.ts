@@ -33,7 +33,11 @@ export const crudHandler = createRouter()
 				started_at: t.String(),
 				ended_at: t.Optional(t.String())
 			})),
-			currentSessionId: t.Optional(t.String())
+			currentSessionId: t.Optional(t.String()),
+			unreadSessionIds: t.Array(t.Object({
+				sessionId: t.String(),
+				projectId: t.String()
+			}))
 		})
 	}, async ({ conn }) => {
 		const projectId = ws.getProjectId(conn);
@@ -42,6 +46,10 @@ export const crudHandler = createRouter()
 
 		// Get the user's saved current session for this project
 		const currentSessionId = projectQueries.getCurrentSessionId(userId, projectId);
+
+		// Get unread sessions for this user/project
+		const unreadRows = sessionQueries.getUnreadSessions(userId, projectId);
+		debug.log('session', `[unread] sessions:list — user=${userId}, project=${projectId}, unreadCount=${unreadRows.length}`, unreadRows);
 
 		// Convert null to undefined for TypeScript optional fields
 		return {
@@ -54,7 +62,8 @@ export const crudHandler = createRouter()
 				current_head_message_id: session.current_head_message_id ?? undefined,
 				ended_at: session.ended_at ?? undefined
 			})),
-			currentSessionId: currentSessionId ?? undefined
+			currentSessionId: currentSessionId ?? undefined,
+			unreadSessionIds: unreadRows.map(r => ({ sessionId: r.session_id, projectId: r.project_id }))
 		};
 	})
 
@@ -324,4 +333,27 @@ export const crudHandler = createRouter()
 		const userId = ws.getUserId(conn);
 		projectQueries.setCurrentSessionId(userId, projectId, data.sessionId);
 		debug.log('session', `User ${userId} set current session to ${data.sessionId} in project ${projectId}`);
+	})
+
+	// Mark a session as read for the current user
+	.on('sessions:mark-read', {
+		data: t.Object({
+			sessionId: t.String()
+		})
+	}, async ({ data, conn }) => {
+		const userId = ws.getUserId(conn);
+		sessionQueries.markRead(userId, data.sessionId);
+		debug.log('session', `[unread] Marked session ${data.sessionId} as READ for user ${userId}`);
+	})
+
+	// Mark a session as unread for the current user
+	.on('sessions:mark-unread', {
+		data: t.Object({
+			sessionId: t.String(),
+			projectId: t.String()
+		})
+	}, async ({ data, conn }) => {
+		const userId = ws.getUserId(conn);
+		sessionQueries.markUnread(userId, data.sessionId, data.projectId);
+		debug.log('session', `[unread] Marked session ${data.sessionId} as UNREAD for user ${userId} in project ${data.projectId}`);
 	});

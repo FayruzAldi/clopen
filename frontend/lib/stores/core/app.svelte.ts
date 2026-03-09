@@ -140,23 +140,69 @@ export function clearSessionProcessState(sessionId: string): void {
 // ========================================
 
 /**
+ * Persist the current unread sessions Map to the server via user:save-state.
+ * Uses the same proven infrastructure as currentProjectId/lastView persistence.
+ * Debounced: only the last call within 500ms actually persists.
+ */
+let saveUnreadTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function persistUnreadSessions(): void {
+	if (saveUnreadTimeout) clearTimeout(saveUnreadTimeout);
+	saveUnreadTimeout = setTimeout(() => {
+		const serialized = Object.fromEntries(appState.unreadSessions);
+		debug.log('session', '[unread] Persisting to server:', serialized);
+		ws.http('user:save-state', { key: 'unreadSessions', value: serialized }).catch(err => {
+			debug.error('session', '[unread] Error persisting unread sessions:', err);
+		});
+	}, 500);
+}
+
+/**
  * Mark a session as unread (has new activity the user hasn't seen).
+ * Persists to backend so the state survives browser refresh.
  */
 export function markSessionUnread(sessionId: string, projectId: string): void {
 	const next = new Map(appState.unreadSessions);
 	next.set(sessionId, projectId);
 	appState.unreadSessions = next;
+
+	// Persist to backend via user:save-state (proven infrastructure)
+	debug.log('session', `[unread] markSessionUnread: sessionId=${sessionId}, projectId=${projectId}`);
+	ws.emit('sessions:mark-unread', { sessionId, projectId });
+	persistUnreadSessions();
 }
 
 /**
  * Mark a session as read (user has viewed it).
+ * Persists to backend so the state survives browser refresh.
  */
 export function markSessionRead(sessionId: string): void {
 	if (appState.unreadSessions.has(sessionId)) {
 		const next = new Map(appState.unreadSessions);
 		next.delete(sessionId);
 		appState.unreadSessions = next;
+
+		// Persist to backend via user:save-state (proven infrastructure)
+		debug.log('session', `[unread] markSessionRead: sessionId=${sessionId}`);
+		ws.emit('sessions:mark-read', { sessionId });
+		persistUnreadSessions();
 	}
+}
+
+/**
+ * Restore unread sessions from server state (called during initialization).
+ */
+export function restoreUnreadSessions(saved: Record<string, string> | null): void {
+	if (!saved || typeof saved !== 'object') return;
+
+	const next = new Map(appState.unreadSessions);
+	for (const [sessionId, projectId] of Object.entries(saved)) {
+		if (typeof sessionId === 'string' && typeof projectId === 'string') {
+			next.set(sessionId, projectId);
+		}
+	}
+	appState.unreadSessions = next;
+	debug.log('session', '[unread] Restored from server:', Object.fromEntries(appState.unreadSessions));
 }
 
 /**
