@@ -501,8 +501,8 @@ export const PANEL_OPTIONS: { id: PanelId; title: string; icon: IconName }[] = [
 	{ id: 'preview', title: 'Preview', icon: 'lucide:globe' }
 ];
 
-// Default: Main + Stack layout
-const defaultPreset = builtInPresets.find((p) => p.id === 'main-stack')!;
+// Default: Full Grid layout (5 panels)
+const defaultPreset = builtInPresets.find((p) => p.id === 'full-grid')!;
 
 // ============================================
 // CORE STATE
@@ -511,7 +511,7 @@ const defaultPreset = builtInPresets.find((p) => p.id === 'main-stack')!;
 export const workspaceState = $state<WorkspaceState>({
 	panels: { ...defaultPanels },
 	layout: defaultPreset.layout,
-	activePresetId: 'main-stack',
+	activePresetId: 'full-grid',
 	navigatorCollapsed: false,
 	navigatorWidth: 200,
 	activeMobilePanel: 'chat'
@@ -720,7 +720,7 @@ export function applyLayoutPreset(preset: LayoutPreset): void {
 
 export function resetToDefault(): void {
 	applyLayoutPreset(defaultPreset);
-	debug.log('workspace', 'Reset to default layout (Main + Stack)');
+	debug.log('workspace', 'Reset to default layout (Full Grid)');
 }
 
 // ============================================
