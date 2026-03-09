@@ -17,7 +17,6 @@
 	import UserSettings from './user/UserSettings.svelte';
 	import NotificationSettings from './notifications/NotificationSettings.svelte';
 	import GeneralSettings from './general/GeneralSettings.svelte';
-	import pkg from '../../../../package.json';
 
 	// Responsive state
 	let isMobileMenuOpen = $state(false);
@@ -179,13 +178,7 @@
 						{/each}
 					</nav>
 
-					<footer class="p-4 border-t border-slate-200 dark:border-slate-800">
-						<div class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-500">
-							<Icon name="lucide:info" class="w-4 h-4" />
-							<span>Clopen v{pkg.version}</span>
-						</div>
-					</footer>
-				</aside>
+					</aside>
 
 				<!-- Mobile Menu Overlay -->
 				{#if isMobile && isMobileMenuOpen}
