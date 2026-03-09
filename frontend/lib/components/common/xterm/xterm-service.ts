@@ -30,6 +30,7 @@ export class XTermService {
 	private sessionId: string | null = null;
 	private resizeTimeout: ReturnType<typeof setTimeout> | null = null;
 	private inputDisposable: any = null;
+	private lastSentDims: { cols: number; rows: number } | null = null;
 
 	constructor() {
 		// Service is stateless by design
@@ -293,6 +294,12 @@ export class XTermService {
 				const dims = this.fitAddon.proposeDimensions();
 
 				if (dims && sessionId) {
+					// Skip if dimensions haven't changed
+					if (this.lastSentDims && this.lastSentDims.cols === dims.cols && this.lastSentDims.rows === dims.rows) {
+						return;
+					}
+					this.lastSentDims = { cols: dims.cols, rows: dims.rows };
+
 					// Notify backend of new terminal size via WebSocket HTTP
 					debug.log('terminal', `🔧 Syncing terminal size: ${dims.cols}x${dims.rows}`);
 					ws.http('terminal:resize', {
@@ -422,6 +429,7 @@ export class XTermService {
 		this.clipboardAddon = null;
 		this.unicode11Addon = null;
 		this.ligaturesAddon = null;
+		this.lastSentDims = null;
 		this.isInitialized = false;
 		this.isReady = false;
 	}
