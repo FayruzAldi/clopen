@@ -496,9 +496,9 @@ const defaultPanels: Record<PanelId, PanelConfig> = {
 export const PANEL_OPTIONS: { id: PanelId; title: string; icon: IconName }[] = [
 	{ id: 'chat', title: 'AI Assistant', icon: 'lucide:bot' },
 	{ id: 'files', title: 'Files', icon: 'lucide:folder' },
+	{ id: 'git', title: 'Source Control', icon: 'lucide:git-branch' },
 	{ id: 'preview', title: 'Preview', icon: 'lucide:globe' },
-	{ id: 'terminal', title: 'Terminal', icon: 'lucide:terminal' },
-	{ id: 'git', title: 'Source Control', icon: 'lucide:git-branch' }
+	{ id: 'terminal', title: 'Terminal', icon: 'lucide:terminal' }
 ];
 
 // Default: Main + Stack layout
