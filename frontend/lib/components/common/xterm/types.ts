@@ -23,6 +23,7 @@ export interface XTermMethods {
 	writeData(data: string): void;
 	getSelectedText(): string;
 	clearSelection(): void;
+	pasteText(text: string): void;
 }
 
 export interface TerminalSize {

@@ -6,9 +6,12 @@
  */
 
 import { browser } from '$frontend/lib/app-environment';
-import type { Terminal } from 'xterm';
+import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
 import type { WebLinksAddon } from '@xterm/addon-web-links';
+import type { ClipboardAddon } from '@xterm/addon-clipboard';
+import type { Unicode11Addon } from '@xterm/addon-unicode11';
+import type { LigaturesAddon } from '@xterm/addon-ligatures';
 import type { TerminalLine } from '$shared/types/terminal';
 import { terminalConfig } from './terminal-config';
 import { debug } from '$shared/utils/logger';
@@ -18,6 +21,9 @@ export class XTermService {
 	public terminal: Terminal | null = null;
 	public fitAddon: FitAddon | null = null;
 	public webLinksAddon: WebLinksAddon | null = null;
+	public clipboardAddon: ClipboardAddon | null = null;
+	private unicode11Addon: Unicode11Addon | null = null;
+	private ligaturesAddon: LigaturesAddon | null = null;
 	public isInitialized = false;
 	public isReady = false;
 
@@ -49,27 +55,39 @@ export class XTermService {
 			this.terminal = null;
 			this.fitAddon = null;
 			this.webLinksAddon = null;
+			this.clipboardAddon = null;
+				this.unicode11Addon = null;
+			this.ligaturesAddon = null;
 		}
 
 		try {
 			debug.log('terminal', '🚀 Initializing XTerm...');
 
 			// Dynamic import xterm classes
-			const [{ Terminal }, { FitAddon }, { WebLinksAddon }] = await Promise.all([
-				import('xterm'),
+			const [{ Terminal }, { FitAddon }, { WebLinksAddon }, { ClipboardAddon }, { Unicode11Addon }] = await Promise.all([
+				import('@xterm/xterm'),
 				import('@xterm/addon-fit'),
-				import('@xterm/addon-web-links')
+				import('@xterm/addon-web-links'),
+				import('@xterm/addon-clipboard'),
+				import('@xterm/addon-unicode11')
 			]);
 
 			// Create terminal instance
 			this.terminal = new Terminal(terminalConfig);
 
-			// Create and load addons
+			// Create and load core addons
 			this.fitAddon = new FitAddon();
 			this.webLinksAddon = new WebLinksAddon();
+			this.clipboardAddon = new ClipboardAddon();
+			this.unicode11Addon = new Unicode11Addon();
 
 			this.terminal.loadAddon(this.fitAddon);
 			this.terminal.loadAddon(this.webLinksAddon);
+			this.terminal.loadAddon(this.clipboardAddon);
+			this.terminal.loadAddon(this.unicode11Addon);
+
+			// Enable Unicode 11 for better character width support
+			this.terminal.unicode.activeVersion = '11';
 
 			// Open terminal in container
 			this.terminal.open(container);
@@ -80,6 +98,16 @@ export class XTermService {
 				this.fitAddon.fit();
 			} catch {
 				debug.log('terminal', '⚠️ Initial fit failed (container may have zero dimensions), will retry on resize');
+			}
+
+			// Try ligatures addon for font ligature rendering (non-critical)
+			try {
+				const { LigaturesAddon } = await import('@xterm/addon-ligatures');
+				this.ligaturesAddon = new LigaturesAddon();
+				this.terminal.loadAddon(this.ligaturesAddon);
+				debug.log('terminal', '🔤 Font ligatures enabled');
+			} catch {
+				debug.log('terminal', '⚠️ Ligatures addon not available');
 			}
 
 			this.isInitialized = true;
@@ -94,6 +122,9 @@ export class XTermService {
 			}
 			this.fitAddon = null;
 			this.webLinksAddon = null;
+			this.clipboardAddon = null;
+				this.unicode11Addon = null;
+			this.ligaturesAddon = null;
 			debug.error('terminal', '❌ Failed to initialize XTerm:', error);
 		}
 	}
@@ -293,20 +324,11 @@ export class XTermService {
 	scrollToBottomIfNearEnd(): void {
 		if (!this.terminal) return;
 
-		const viewport = (this.terminal as any)._core?.viewport;
-		if (!viewport) {
-			this.scrollToBottom();
-			return;
-		}
+		const buffer = this.terminal.buffer.active;
+		const isNearBottom = buffer.viewportY >= buffer.baseY - 3;
 
-		const scrollTop = viewport._viewportElement.scrollTop;
-		const scrollHeight = viewport._viewportElement.scrollHeight;
-		const clientHeight = viewport._viewportElement.clientHeight;
-
-		// If within 3 lines of bottom, scroll to bottom
-		const threshold = this.terminal.rows * 3;
-		if (scrollHeight - scrollTop - clientHeight < threshold) {
-			this.scrollToBottom();
+		if (isNearBottom) {
+			this.terminal.scrollToBottom();
 		}
 	}
 
@@ -362,6 +384,21 @@ export class XTermService {
 	}
 
 	/**
+	 * Paste text by sending to PTY via WebSocket
+	 */
+	pasteText(text: string): void {
+		if (!this.sessionId || !text) return;
+		try {
+			ws.emit('terminal:input', {
+				sessionId: this.sessionId,
+				data: text
+			});
+		} catch (error) {
+			debug.error('terminal', '❌ Error pasting text:', error);
+		}
+	}
+
+	/**
 	 * Cleanup terminal resources
 	 */
 	dispose(): void {
@@ -382,6 +419,9 @@ export class XTermService {
 
 		this.fitAddon = null;
 		this.webLinksAddon = null;
+		this.clipboardAddon = null;
+		this.unicode11Addon = null;
+		this.ligaturesAddon = null;
 		this.isInitialized = false;
 		this.isReady = false;
 	}

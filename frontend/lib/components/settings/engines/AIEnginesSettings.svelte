@@ -7,7 +7,7 @@
 	import { isDarkMode } from '$frontend/lib/utils/theme';
 	import { ENGINES } from '$shared/constants/engines';
 	import { claudeAccountsStore, type ClaudeAccountItem as ClaudeCodeAccountItem } from '$frontend/lib/stores/features/claude-accounts.svelte';
-	import type { Terminal } from 'xterm';
+	import type { Terminal } from '@xterm/xterm';
 	import type { FitAddon } from '@xterm/addon-fit';
 
 	const claudeCodeEngine = ENGINES.find(e => e.type === 'claude-code')!;
@@ -99,11 +99,11 @@
 		if (!browser || !debugTermContainer || debugTerminal) return;
 
 		const [{ Terminal }, { FitAddon }] = await Promise.all([
-			import('xterm'),
+			import('@xterm/xterm'),
 			import('@xterm/addon-fit')
 		]);
 
-		await import('xterm/css/xterm.css');
+		await import('@xterm/xterm/css/xterm.css');
 
 		debugTerminal = new Terminal({
 			theme: {

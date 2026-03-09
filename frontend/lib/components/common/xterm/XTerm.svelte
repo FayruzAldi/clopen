@@ -14,7 +14,7 @@
 	import { settings } from '$frontend/lib/stores/features/settings.svelte';
 	
 	// Import CSS directly - Vite will handle it properly
-	import 'xterm/css/xterm.css';
+	import '@xterm/xterm/css/xterm.css';
 
 	// Props
 	const { 
@@ -183,125 +183,37 @@
 		};
 	}
 
-	// Handle right-click copy/paste functionality
-	function setupRightClickCopy() {
+	// Handle right-click copy/paste via clipboard addon
+	function setupClipboardHandling() {
 		if (!terminalContainer || !xtermService.terminal) return;
 
-		const handleRightClick = async (event: MouseEvent) => {
-			event.preventDefault(); // Prevent default context menu
-			
-			// Get selected text from xterm.js
+		const handleContextMenu = async (event: MouseEvent) => {
+			event.preventDefault();
+
 			const selectedText = xtermService.getSelectedText();
-			
-			if (selectedText && selectedText.trim()) {
+
+			if (selectedText?.trim()) {
 				// Copy selected text to clipboard
 				try {
 					await navigator.clipboard.writeText(selectedText);
-					
-					// Clear selection after copy (like most terminals do)
 					xtermService.clearSelection();
-					
-					// Show brief visual feedback
-					showCopyFeedback();
-				} catch (err) {
-				}
+				} catch { /* clipboard not available */ }
 			} else {
-				// No text selected - paste from clipboard instead
+				// No text selected - paste from clipboard
 				try {
-					const clipboardText = await navigator.clipboard.readText();
-					if (clipboardText && clipboardText.trim() && xtermService.isReady) {
-						
-						// Use terminal's built-in paste functionality
-						// This simulates typing each character through the input handler
-						if ((xtermService as any).inputHandler) {
-							// Process each character through the input handler
-							for (const char of clipboardText) {
-								// Skip newlines - let user decide when to execute
-								if (char !== '\n' && char !== '\r') {
-									(xtermService as any).inputHandler(char);
-								}
-							}
-						}
-						
-						// Show brief visual feedback
-						showPasteFeedback();
+					const text = await navigator.clipboard.readText();
+					if (text?.trim()) {
+						xtermService.pasteText(text);
 					}
-				} catch {
-					// paste not supported
-				}
+				} catch { /* clipboard not available */ }
 			}
 		};
 
-		// Add right-click event listener to terminal container
-		terminalContainer.addEventListener('contextmenu', handleRightClick);
-		
+		terminalContainer.addEventListener('contextmenu', handleContextMenu);
+
 		return () => {
-			terminalContainer?.removeEventListener('contextmenu', handleRightClick);
+			terminalContainer?.removeEventListener('contextmenu', handleContextMenu);
 		};
-	}
-
-	// Show brief visual feedback for copy action
-	function showCopyFeedback() {
-		if (!terminalContainer) return;
-		
-		// Create temporary feedback element
-		const feedback = document.createElement('div');
-		feedback.textContent = 'Copied!';
-		feedback.style.cssText = `
-			position: absolute;
-			top: 10px;
-			right: 10px;
-			background: rgb(34 197 94 / 0.9);
-			color: white;
-			padding: 4px 8px;
-			border-radius: 4px;
-			font-size: 12px;
-			font-family: system-ui, sans-serif;
-			z-index: 1000;
-			pointer-events: none;
-		`;
-		
-		terminalContainer.style.position = 'relative';
-		terminalContainer.appendChild(feedback);
-		
-		// Remove feedback after 1 second
-		setTimeout(() => {
-			if (feedback.parentNode) {
-				feedback.parentNode.removeChild(feedback);
-			}
-		}, 1000);
-	}
-
-	// Show brief visual feedback for paste action
-	function showPasteFeedback() {
-		if (!terminalContainer) return;
-		
-		// Create temporary feedback element
-		const feedback = document.createElement('div');
-		feedback.textContent = 'Pasted!';
-		feedback.style.cssText = `
-			position: absolute;
-			top: 10px;
-			right: 10px;
-			background: rgba(59, 130, 246, 0.9);
-			color: white;
-			padding: 4px 8px;
-			border-radius: 4px;
-			font-size: 12px;
-			font-family: system-ui, sans-serif;
-			z-index: 1000;
-			pointer-events: none;
-		`;
-		
-		terminalContainer.style.position = 'relative';
-		terminalContainer.appendChild(feedback);
-		
-		// Remove feedback after 1 second
-		setTimeout(() => {
-			if (feedback.parentNode) {
-				feedback.parentNode.removeChild(feedback);
-			}
-		}, 1000);
 	}
 
 	// Handle theme changes
@@ -656,12 +568,12 @@
 
 		const cleanupResize = setupResizeHandling();
 		const cleanupTheme = setupThemeHandling();
-		const cleanupRightClick = setupRightClickCopy();
+		const cleanupClipboard = setupClipboardHandling();
 
 		return () => {
 			cleanupResize();
 			cleanupTheme();
-			cleanupRightClick?.();
+			cleanupClipboard?.();
 		};
 	});
 
@@ -711,6 +623,11 @@
 	export function clearSelection() {
 		xtermService.clearSelection();
 	}
+
+	export function pasteText(text: string) {
+		xtermService.pasteText(text);
+	}
+
 </script>
 
 <!-- Pure xterm.js terminal container -->
