@@ -214,26 +214,21 @@
 </script>
 
 <!-- Preview Toolbar -->
-<div class="relative px-3 py-2.5 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
-	<!-- Tabs bar -->
+<div class="relative bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+	<!-- Tabs bar (Git-style underline tabs) — separated with its own border-bottom -->
 	{#if tabs.length > 0}
-		<div class="flex items-center gap-1.5 overflow-x-auto mb-1.5">
-			<!-- Tabs -->
+		<div class="relative flex items-center overflow-x-auto border-b border-slate-200 dark:border-slate-700">
 			{#each tabs as tab}
-				<div
-					class="group relative flex items-center gap-2 pl-3 pr-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg transition-all duration-200 min-w-0 max-w-xs cursor-pointer
-						{tab.id === activeTabId 
-							? 'bg-slate-100 dark:bg-slate-700'
-							: 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700'}"
+				{@const isActive = tab.id === activeTabId}
+				<button
+					type="button"
+					class="group relative flex items-center justify-center gap-1 px-2 py-2 text-xs font-medium transition-colors min-w-0 max-w-xs cursor-pointer
+						{isActive
+							? 'text-violet-600 dark:text-violet-400'
+							: 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}"
 					onclick={() => onSwitchTab(tab.id)}
 					role="tab"
 					tabindex="0"
-					onkeydown={(e) => {
-						if (e.key === 'Enter' || e.key === ' ') {
-							e.preventDefault();
-							onSwitchTab(tab.id);
-						}
-					}}
 				>
 					{#if tab.id === mcpControlledTabId}
 						<Icon name="lucide:bot" class="w-3 h-3 flex-shrink-0 text-amber-500" />
@@ -242,81 +237,95 @@
 					{:else}
 						<Icon name="lucide:globe" class="w-3 h-3 flex-shrink-0" />
 					{/if}
-					<span class="text-xs font-medium truncate max-w-37.5" title={tab.url}>
+					<span class="truncate max-w-28" title={tab.url}>
 						{tab.title || 'New Tab'}
 					</span>
 					{#if tab.id === mcpControlledTabId}
-						<span title="MCP Controlled" class="flex">
-							<Icon name="lucide:lock" class="w-3 h-3 flex-shrink-0 text-amber-500" />
+						<span title="MCP Controlled" class="flex"><Icon name="lucide:lock" class="w-3 h-3 flex-shrink-0 text-amber-500" /></span>
+					{/if}
+					<!-- Close button -->
+					{#if tab.id !== mcpControlledTabId}
+						<span
+							role="button"
+							tabindex="0"
+							onclick={(e) => {
+								e.stopPropagation();
+								onCloseTab(tab.id);
+							}}
+							onkeydown={(e) => {
+								if (e.key === 'Enter' || e.key === ' ') {
+									e.stopPropagation();
+									onCloseTab(tab.id);
+								}
+							}}
+							class="flex items-center justify-center w-4 h-4 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200 flex-shrink-0"
+							title="Close tab"
+						>
+							<Icon name="lucide:x" class="w-2.5 h-2.5" />
 						</span>
 					{/if}
-					<button
-						onclick={(e) => {
-							e.stopPropagation();
-							onCloseTab(tab.id);
-						}}
-						class="flex hover:bg-slate-300 dark:hover:bg-slate-600 rounded p-0.5 transition-all duration-200 {tab.id === mcpControlledTabId ? 'hidden' : ''}"
-						title="Close tab"
-						disabled={tab.id === mcpControlledTabId}
-					>
-						<Icon name="lucide:x" class="w-3 h-3" />
-					</button>
-				</div>
+					{#if isActive}
+						<span class="absolute bottom-0 inset-x-0 h-px bg-violet-600 dark:bg-violet-400"></span>
+					{/if}
+				</button>
 			{/each}
-		
+
 			<!-- New tab button -->
 			<button
+				type="button"
 				onclick={() => onNewTab()}
-				class="flex items-center justify-center w-5 h-5 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200"
+				class="flex items-center justify-center w-6 h-6 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-all duration-200 flex-shrink-0 ml-1"
 				title="Open new tab"
 			>
 				<Icon name="lucide:plus" class="w-3 h-3" />
 			</button>
 		</div>
 	{/if}
-	
-	<!-- Main toolbar header -->
-	<div class="px-1 py-0.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-		<div class="flex items-center justify-between gap-4">
-			<!-- Left section: URL navigation -->
-			<div class="flex items-center gap-3 flex-1 min-w-0">
-				<!-- URL input with integrated controls -->
-				<input
-					type="text"
-					bind:value={urlInput}
-					onkeydown={handleUrlKeydown}
-					oninput={handleUrlInput}
-					onfocus={() => isUserTyping = true}
-					onblur={() => isUserTyping = false}
-					placeholder="Enter URL to preview..."
-					class="flex-1 pl-3 py-2.5 text-sm bg-transparent border-0 focus:outline-none min-w-0 text-ellipsis"
-				/>
-				<div class="flex items-center gap-1 px-2">
-					{#if url}
+
+	<!-- Main toolbar header (URL bar) -->
+	<div class="px-2.5 py-1.5">
+		<div class="px-1 py-0.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+			<div class="flex items-center justify-between gap-3">
+				<!-- Left section: URL navigation -->
+				<div class="flex items-center gap-2 flex-1 min-w-0">
+					<!-- URL input with integrated controls -->
+					<input
+						type="text"
+						bind:value={urlInput}
+						onkeydown={handleUrlKeydown}
+						oninput={handleUrlInput}
+						onfocus={() => isUserTyping = true}
+						onblur={() => isUserTyping = false}
+						placeholder="Enter URL to preview..."
+						class="flex-1 pl-3 py-2 text-sm bg-transparent border-0 focus:outline-none min-w-0 text-ellipsis"
+					/>
+					<div class="flex items-center gap-1 px-1.5">
+						{#if url}
+							<button
+								onclick={handleOpenInExternalBrowser}
+								class="flex p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
+								title="Open in external browser"
+							>
+								<Icon name="lucide:external-link" class="w-4 h-4" />
+							</button>
+							<button
+								onclick={handleRefresh}
+								disabled={isLoading}
+								class="flex p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200 disabled:opacity-50"
+								title="Refresh current page"
+							>
+								<Icon name={isLoading ? 'lucide:loader-circle' : 'lucide:refresh-cw'} class="w-4 h-4 transition-transform duration-200 {isLoading ? 'animate-spin' : 'hover:rotate-180'}" />
+							</button>
+						{/if}
 						<button
-							onclick={handleOpenInExternalBrowser}
-							class="flex p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
-							title="Open in external browser"
+							onclick={handleGoClick}
+							disabled={!urlInput.trim() || isLoading}
+							class="ml-0.5 px-3.5 py-1 text-xs font-medium rounded-md bg-violet-500 hover:bg-violet-600 disabled:bg-slate-300 disabled:dark:bg-slate-600 text-white transition-all duration-200 disabled:opacity-50"
+							title="Navigate to URL"
 						>
-							<Icon name="lucide:external-link" class="w-4 h-4" />
+							Go
 						</button>
-						<button
-							onclick={handleRefresh}
-							disabled={isLoading}
-							class="flex p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200 disabled:opacity-50"
-							title="Refresh current page"
-						>
-							<Icon name={isLoading ? 'lucide:loader-circle' : 'lucide:refresh-cw'} class="w-4 h-4 transition-transform duration-200 {isLoading ? 'animate-spin' : 'hover:rotate-180'}" />
-						</button>
-					{/if}
-					<button
-						onclick={handleGoClick}
-						disabled={!urlInput.trim() || isLoading}
-						class="ml-1 px-4 py-1.5 text-sm font-medium rounded-lg bg-violet-500 hover:bg-violet-600 disabled:bg-slate-300 disabled:dark:bg-slate-600 text-white transition-all duration-200 disabled:opacity-50"
-						title="Navigate to URL"
-					>
-						Go
-					</button>
+					</div>
 				</div>
 			</div>
 		</div>

@@ -258,7 +258,7 @@
 	aria-label="Terminal application">
 
 	<!-- Terminal Header with Tabs -->
-	<div class="flex-shrink-0 px-3 py-2.5 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+	<div class="flex-shrink-0 bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
 		<!-- Terminal Tabs -->
 		<TerminalTabs
 			sessions={terminalStore.sessions}

@@ -31,52 +31,54 @@
 	});
 </script>
 
-<!-- Compact Terminal Tabs -->
-<div class="flex items-center gap-1.5 overflow-x-auto flex-1">
+<!-- Terminal Tabs (Git-style underline tabs) -->
+<div class="relative flex items-center overflow-x-auto flex-1">
 	{#each sessions as session (session.id)}
-		<div
-			class="group relative flex items-center gap-2 pl-3 pr-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg transition-all duration-200 min-w-0 max-w-xs cursor-pointer
-				{session.isActive
-					? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-100'
-					: 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'}"
+		{@const isActive = session.isActive}
+		<button
+			type="button"
+			class="group relative flex items-center justify-center gap-1 px-2 py-2 text-xs font-medium transition-colors min-w-0 max-w-xs cursor-pointer
+				{isActive
+					? 'text-violet-600 dark:text-violet-400'
+					: 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}"
 			onclick={() => onSwitchSession?.(session.id)}
 			role="tab"
 			tabindex="0"
-			onkeydown={(e) => {
-				if (e.key === 'Enter' || e.key === ' ') {
-					e.preventDefault();
-					onSwitchSession?.(session.id);
-				}
-			}}
 		>
-			<!-- Terminal icon -->
 			<Icon name="lucide:terminal" class="w-3 h-3 flex-shrink-0" />
-
-			<!-- Session name -->
-			<span class="text-xs font-medium truncate max-w-37.5">
-				{session.name}
-			</span>
-
+			<span class="truncate max-w-28">{session.name}</span>
 			<!-- Close button -->
-			<button
+			<span
+				role="button"
+				tabindex="0"
 				onclick={(e) => {
 					e.stopPropagation();
 					onCloseSession?.(session.id);
 				}}
-				class="flex hover:bg-slate-300 dark:hover:bg-slate-600 rounded p-0.5 transition-all duration-200 flex-shrink-0"
+				onkeydown={(e) => {
+					if (e.key === 'Enter' || e.key === ' ') {
+						e.stopPropagation();
+						onCloseSession?.(session.id);
+					}
+				}}
+				class="flex items-center justify-center w-4 h-4 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200 flex-shrink-0"
 				title="Close terminal"
 				aria-label="Close terminal session"
 			>
-				<Icon name="lucide:x" class="w-3 h-3" />
-			</button>
-		</div>
+				<Icon name="lucide:x" class="w-2.5 h-2.5" />
+			</span>
+			{#if isActive}
+				<span class="absolute bottom-0 inset-x-0 h-px bg-violet-600 dark:bg-violet-400"></span>
+			{/if}
+		</button>
 	{/each}
 
 	<!-- New terminal button -->
 	{#if onNewSession}
 		<button
+			type="button"
 			onclick={onNewSession}
-			class="flex items-center justify-center w-5 h-5 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200 flex-shrink-0"
+			class="flex items-center justify-center w-6 h-6 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-all duration-200 flex-shrink-0 ml-1"
 			title="New terminal"
 			aria-label="New terminal session"
 		>
