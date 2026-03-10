@@ -2,6 +2,9 @@
  * Timeline data structures and type definitions
  */
 
+/** Sentinel ID for the "initial state" node (before any chat messages) */
+export const INITIAL_NODE_ID = '__initial__';
+
 export interface CheckpointNode {
 	id: string;
 	messageId: string;
@@ -13,6 +16,7 @@ export interface CheckpointNode {
 	isOrphaned: boolean;
 	isCurrent: boolean;
 	hasSnapshot: boolean;
+	isInitial?: boolean; // true for the "initial state" node
 	senderName?: string | null;
 	// File change statistics (git-like)
 	filesChanged?: number;

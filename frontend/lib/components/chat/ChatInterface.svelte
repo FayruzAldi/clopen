@@ -12,8 +12,8 @@
 <script lang="ts">
 	import { sessionState, setCurrentSession, createNewChatSession, clearMessages, loadMessagesForSession } from '$frontend/lib/stores/core/sessions.svelte';
 	import { projectState } from '$frontend/lib/stores/core/projects.svelte';
-	import { appState, getSessionProcessState } from '$frontend/lib/stores/core/app.svelte';
-	import { presenceState } from '$frontend/lib/stores/core/presence.svelte';
+	import { appState, isSessionUnread } from '$frontend/lib/stores/core/app.svelte';
+	import { presenceState, isSessionWaitingInput } from '$frontend/lib/stores/core/presence.svelte';
 	import { userStore } from '$frontend/lib/stores/features/user.svelte';
 	import { addNotification } from '$frontend/lib/stores/ui/notification.svelte';
 	import { chatService } from '$frontend/lib/services/chat/chat.service';
@@ -294,7 +294,7 @@
 									>
 										<div class="flex-1 min-w-0">
 											<div class="flex items-center gap-1.5">
-												<span class="w-1.5 h-1.5 rounded-full shrink-0 {isStreaming ? 'bg-emerald-500 animate-pulse' : isCurrent ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600'}"></span>
+												<span class="w-1.5 h-1.5 rounded-full shrink-0 {isStreaming ? (isSessionWaitingInput(session.id, projectState.currentProject?.id) ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500 animate-pulse') : isCurrent ? 'bg-green-500' : isSessionUnread(session.id) ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'}"></span>
 												<span class="text-sm font-medium truncate">{getSessionShortTitle(session)}</span>
 											</div>
 											<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -317,18 +317,18 @@
 											</div>
 										{/if}
 										{#if isStreaming}
-										{#if getSessionProcessState(session.id).isWaitingInput}
-											<span class="shrink-0 flex items-center gap-1 px-1.5 py-0.5 text-3xs font-medium rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
-												<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-												Input
-											</span>
-										{:else}
-											<span class="shrink-0 flex items-center gap-1 px-1.5 py-0.5 text-3xs font-medium rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400">
-												<span class="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse"></span>
-												AI
-											</span>
+											{#if isSessionWaitingInput(session.id, projectState.currentProject?.id)}
+												<span class="shrink-0 flex items-center gap-1 px-1.5 py-0.5 text-3xs font-medium rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
+													<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+													Input
+												</span>
+											{:else}
+												<span class="shrink-0 flex items-center gap-1 px-1.5 py-0.5 text-3xs font-medium rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400">
+													<span class="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse"></span>
+													AI
+												</span>
+											{/if}
 										{/if}
-									{/if}
 									</button>
 								{/each}
 							</div>

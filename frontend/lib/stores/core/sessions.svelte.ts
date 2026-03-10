@@ -13,6 +13,7 @@ import { buildMetadataFromTransport } from '$shared/utils/message-formatter';
 import ws from '$frontend/lib/utils/ws';
 import { projectState } from './projects.svelte';
 import { setupEditModeListener, restoreEditMode } from '$frontend/lib/stores/ui/edit-mode.svelte';
+import { markSessionUnread, markSessionRead, appState } from '$frontend/lib/stores/core/app.svelte';
 import { debug } from '$shared/utils/logger';
 
 interface SessionState {
@@ -21,6 +22,8 @@ interface SessionState {
 	messages: SDKMessageFormatter[];
 	isLoading: boolean;
 	error: string | null;
+	/** True if the current session has message history (even if HEAD is null after restore to initial) */
+	hasMessageHistory: boolean;
 }
 
 // Session state using Svelte 5 runes
@@ -29,7 +32,8 @@ export const sessionState = $state<SessionState>({
 	currentSession: null,
 	messages: [],
 	isLoading: false,
-	error: null
+	error: null,
+	hasMessageHistory: false
 });
 
 // ========================================
@@ -55,6 +59,11 @@ export function messageCount() {
 export async function setCurrentSession(session: ChatSession | null, skipLoadMessages: boolean = false) {
 	const previousSessionId = sessionState.currentSession?.id;
 	sessionState.currentSession = session;
+
+	// Clear unread status when viewing a session
+	if (session) {
+		markSessionRead(session.id);
+	}
 
 	// Leave previous chat session room
 	if (previousSessionId && previousSessionId !== session?.id) {
@@ -200,6 +209,7 @@ export function updateMessages(messages: SDKMessageFormatter[]) {
 
 export function clearMessages() {
 	sessionState.messages = [];
+	sessionState.hasMessageHistory = false;
 }
 
 export async function loadMessagesForSession(sessionId: string) {
@@ -209,12 +219,22 @@ export async function loadMessagesForSession(sessionId: string) {
 		if (response && Array.isArray(response)) {
 			// Messages from server already have correct SDKMessageFormatter shape with metadata
 			sessionState.messages = response as SDKMessageFormatter[];
+
+			if (response.length > 0) {
+				sessionState.hasMessageHistory = true;
+			} else {
+				// HEAD might be null (restored to initial) — check if session has any messages at all
+				const allResponse = await ws.http('messages:list', { session_id: sessionId, include_all: true });
+				sessionState.hasMessageHistory = Array.isArray(allResponse) && allResponse.length > 0;
+			}
 		} else {
 			sessionState.messages = [];
+			sessionState.hasMessageHistory = false;
 		}
 	} catch (error) {
 		debug.error('session', 'Error loading messages:', error);
 		sessionState.messages = [];
+		sessionState.hasMessageHistory = false;
 	}
 }
 
@@ -230,8 +250,19 @@ export async function loadSessions() {
 		const response = await ws.http('sessions:list');
 
 		if (response) {
-			const { sessions, currentSessionId } = response;
+			const { sessions, currentSessionId, unreadSessionIds } = response;
 			sessionState.sessions = sessions;
+
+			// Restore unread session state from backend
+			debug.log('session', '[unread] loadSessions received unreadSessionIds:', unreadSessionIds);
+			if (unreadSessionIds && Array.isArray(unreadSessionIds) && unreadSessionIds.length > 0) {
+				const next = new Map(appState.unreadSessions);
+				for (const { sessionId, projectId } of unreadSessionIds) {
+					next.set(sessionId, projectId);
+				}
+				appState.unreadSessions = next;
+				debug.log('session', '[unread] Restored unread sessions:', Array.from(appState.unreadSessions.entries()));
+			}
 
 			// Auto-restore: find the active session for the current project
 			if (!sessionState.currentSession) {
@@ -300,11 +331,11 @@ export function getRecentSessions(limit: number = 10): ChatSession[] {
  * Reload sessions for the current project from the server.
  * Called when the user switches projects so session list stays in sync.
  */
-export async function reloadSessionsForProject() {
+export async function reloadSessionsForProject(): Promise<string | null> {
 	try {
 		const response = await ws.http('sessions:list');
 		if (response) {
-			const { sessions } = response;
+			const { sessions, currentSessionId, unreadSessionIds } = response;
 			// Merge: keep sessions from other projects, replace sessions for current project
 			const currentProjectId = projectState.currentProject?.id;
 			if (currentProjectId) {
@@ -315,10 +346,22 @@ export async function reloadSessionsForProject() {
 			} else {
 				sessionState.sessions = sessions;
 			}
+
+			// Restore unread session state from backend
+			if (unreadSessionIds && Array.isArray(unreadSessionIds)) {
+				const next = new Map(appState.unreadSessions);
+				for (const { sessionId, projectId } of unreadSessionIds) {
+					next.set(sessionId, projectId);
+				}
+				appState.unreadSessions = next;
+			}
+
+			return currentSessionId || null;
 		}
 	} catch (error) {
 		debug.error('session', 'Error reloading sessions:', error);
 	}
+	return null;
 }
 
 // ========================================
@@ -344,6 +387,11 @@ function setupCollaborativeListeners() {
 			sessionState.sessions.push(session);
 		} else {
 			sessionState.sessions[existingIndex] = session;
+		}
+
+		// Mark as unread if it's not the current session
+		if (session.id !== sessionState.currentSession?.id) {
+			markSessionUnread(session.id, session.project_id);
 		}
 	});
 

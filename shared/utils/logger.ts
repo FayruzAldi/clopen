@@ -39,6 +39,7 @@ export type LogLabel =
 	// User
 	| 'user'
 	| 'session'
+	| 'auth'
 	
 	// System
 	| 'server'

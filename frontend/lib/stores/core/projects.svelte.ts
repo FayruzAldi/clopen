@@ -109,14 +109,22 @@ export async function setCurrentProject(project: Project | null) {
 
 				// Reload all sessions for this project from server
 				// (local state may only have sessions from the previous project)
-				await reloadSessionsForProject();
+				const savedSessionId = await reloadSessionsForProject();
 
 				// Check if there's an existing session for this project
 				const existingSessions = getSessionsForProject(project.id);
 				const activeSessions = existingSessions
 					.filter(s => !s.ended_at)
 					.sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
-				const activeSession = activeSessions[0] || null;
+
+				// Try server-saved session first (preserves user's last selected session)
+				let activeSession = savedSessionId
+					? activeSessions.find(s => s.id === savedSessionId) || null
+					: null;
+				// Fall back to most recent active session
+				if (!activeSession) {
+					activeSession = activeSessions[0] || null;
+				}
 
 				if (activeSession) {
 					// Restore the most recent active session for this project

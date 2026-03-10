@@ -5,6 +5,7 @@
 	import { getGitStatusBadgeLabel, getGitStatusBadgeColor } from '$frontend/lib/utils/git-status';
 	import { themeStore } from '$frontend/lib/stores/ui/theme.svelte';
 	import { projectState } from '$frontend/lib/stores/core/projects.svelte';
+	import { settings } from '$frontend/lib/stores/features/settings.svelte';
 	import loader from '@monaco-editor/loader';
 	import type { editor } from 'monaco-editor';
 	import type { GitFileDiff } from '$shared/types/git';
@@ -216,10 +217,11 @@
 				theme: isDark ? 'diff-dark' : 'diff-light',
 				readOnly: true,
 				renderSideBySide: true,
+				renderSideBySideInlineBreakpoint: Math.round(600 * (settings.fontSize / 13)),
 				minimap: { enabled: false },
 				scrollBeyondLastLine: false,
-				fontSize: 12,
-				lineHeight: 20,
+				fontSize: Math.round(settings.fontSize * 0.9),
+				lineHeight: Math.round(settings.fontSize * 0.9 * 1.5),
 				renderOverviewRuler: false,
 				enableSplitViewResizing: true,
 				automaticLayout: true,
@@ -243,6 +245,18 @@
 		const theme = isDark ? 'diff-dark' : 'diff-light';
 		if (diffEditorInstance && monacoInstance) {
 			monacoInstance.editor.setTheme(theme);
+		}
+	});
+
+	// Update font size when setting changes
+	$effect(() => {
+		const size = settings.fontSize;
+		if (diffEditorInstance) {
+			diffEditorInstance.updateOptions({
+				fontSize: Math.round(size * 0.9),
+				lineHeight: Math.round(size * 0.9 * 1.5),
+				renderSideBySideInlineBreakpoint: Math.round(600 * (size / 13))
+			});
 		}
 	});
 

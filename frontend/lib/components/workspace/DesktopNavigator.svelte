@@ -7,9 +7,10 @@
 	import { addNotification } from '$frontend/lib/stores/ui/notification.svelte';
 	import { openSettingsModal } from '$frontend/lib/stores/ui/settings-modal.svelte';
 	import { projectStatusService } from '$frontend/lib/services/project';
-	import { presenceState } from '$frontend/lib/stores/core/presence.svelte';
+	import { presenceState, getProjectStatusColor } from '$frontend/lib/stores/core/presence.svelte';
 	import type { Project } from '$shared/types/database/schema';
 	import { debug } from '$shared/utils/logger';
+	import { settings } from '$frontend/lib/stores/features/settings.svelte';
 	import FolderBrowser from '$frontend/lib/components/common/FolderBrowser.svelte';
 	import Dialog from '$frontend/lib/components/common/Dialog.svelte';
 	import ViewMenu from '$frontend/lib/components/workspace/ViewMenu.svelte';
@@ -30,7 +31,7 @@
 	const isCollapsed = $derived(workspaceState.navigatorCollapsed);
 	const currentProjectId = $derived(projectState.currentProject?.id);
 	const navigatorWidth = $derived(
-		workspaceState.navigatorCollapsed ? 48 : workspaceState.navigatorWidth
+		workspaceState.navigatorCollapsed ? 48 : Math.round(workspaceState.navigatorWidth * (settings.fontSize / 13))
 	);
 
 	const filteredProjects = $derived(() => {
@@ -110,18 +111,7 @@
 		}
 	}
 
-	// Get status color from presence data (single source of truth from backend)
-	// Shows real-time status for ALL projects, not just the active one.
-	// Uses backend-computed isWaitingInput so background sessions are accurate
-	// even when the frontend hasn't received their chat events.
-	function getStatusColor(projectId: string): string {
-		const status = presenceState.statuses.get(projectId);
-		if (!status?.streams) return 'bg-slate-500/30';
-		const activeStreams = status.streams.filter((s: any) => s.status === 'active');
-		if (activeStreams.length === 0) return 'bg-slate-500/30';
-		const hasWaitingInput = activeStreams.some((s: any) => s.isWaitingInput);
-		return hasWaitingInput ? 'bg-amber-500' : 'bg-emerald-500';
-	}
+	// Status color for project indicator — uses shared helper from presence store
 
 	// Close folder browser
 	function closeFolderBrowser() {
@@ -244,7 +234,7 @@
 							<div class="relative shrink-0">
 								<Icon name="lucide:folder" class="w-4 h-4" />
 								<span
-									class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-50 dark:border-slate-900/95 {getStatusColor(project.id ?? '')}"
+									class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-50 dark:border-slate-900/95 {getProjectStatusColor(project.id ?? '')}"
 								></span>
 							</div>
 
@@ -301,7 +291,7 @@
 			</footer>
 		{:else}
 			<!-- Collapsed State: Icon Buttons -->
-			<div class="flex-1 flex flex-col items-center gap-2 py-4 px-2">
+			<div class="flex flex-col items-center pt-4 px-2 shrink-0">
 				<button
 					type="button"
 					class="flex items-center justify-center w-9 h-9 bg-transparent border-none rounded-lg text-slate-500 cursor-pointer transition-all duration-150 relative hover:bg-violet-500/10 hover:text-slate-900 dark:hover:text-slate-100"
@@ -312,13 +302,15 @@
 				</button>
 
 				<div class="w-6 h-px bg-violet-500/10 my-1"></div>
+			</div>
 
-				{#each existingProjects.slice(0, 5) as project (project.id)}
+			<div class="flex-1 flex flex-col items-center gap-2 px-2 pb-4 min-h-0 overflow-y-auto">
+				{#each existingProjects as project (project.id)}
 					{@const projectStatus = presenceState.statuses.get(project.id ?? '')}
 					{@const activeUserCount = (projectStatus?.activeUsers || []).length}
 					<button
 						type="button"
-						class="flex items-center justify-center w-9 h-9 border-none rounded-lg cursor-pointer transition-all duration-150 relative font-semibold text-sm
+						class="flex items-center justify-center w-9 h-9 shrink-0 border-none rounded-lg cursor-pointer transition-all duration-150 relative font-semibold text-sm
 							{currentProjectId === project.id
 							? 'bg-violet-500/10 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300'
 							: 'bg-slate-200/50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-violet-500/10 hover:text-slate-900 dark:hover:text-slate-100'}"
@@ -327,7 +319,7 @@
 					>
 						<span>{getProjectInitials(project.name)}</span>
 						<span
-							class="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-slate-50 dark:border-slate-900/95 {getStatusColor(project.id ?? '')}"
+							class="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-slate-50 dark:border-slate-900/95 {getProjectStatusColor(project.id ?? '')}"
 						></span>
 						{#if activeUserCount > 0}
 							<span

@@ -222,19 +222,14 @@
 		}
 	}
 
-	// Toggle search visibility (preserve inputs, auto-submit on re-open)
-	function toggleSearch() {
-		searchVisible = !searchVisible;
-		if (searchVisible) {
-			setTimeout(() => {
-				searchInputRef?.focus();
-				// Auto-submit if there's already a query
-				if (searchQuery.trim()) {
-					performSearch();
-				}
-			}, 100);
-		}
-		// Don't clear search state on close - preserve inputs
+	function switchToSearch() {
+		searchVisible = true;
+		setTimeout(() => {
+			searchInputRef?.focus();
+			if (searchQuery.trim()) {
+				performSearch();
+			}
+		}, 100);
 	}
 
 	// Search functions
@@ -425,9 +420,9 @@
 
 <div class="relative flex flex-col h-full overflow-hidden">
 	<!-- Modern Header -->
-	<div class="px-5 py-3 border-b border-slate-200 dark:border-slate-700">
+	<div class="px-5 py-2.5 border-b border-slate-200 dark:border-slate-700">
 		<div class="flex items-start justify-between gap-2">
-			<div class="flex-1 min-w-0">
+			<div class="flex-1 min-w-0" title={projectState.currentProject?.path}>
 				<h3 class="text-sm font-bold text-slate-900 dark:text-slate-100">
 					{projectState.currentProject?.name}
 				</h3>
@@ -454,15 +449,7 @@
 						<Icon name="lucide:folder-plus" class="w-4 h-4" />
 					</button>
 				{/if}
-				<!-- Search toggle button -->
-				<button
-					class="flex flex-shrink-0 p-1.5 rounded-md transition-colors {searchVisible ? 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30' : 'text-slate-600 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/30'}"
-					onclick={toggleSearch}
-					title="Search"
-				>
-					<Icon name="lucide:search" class="w-4 h-4" />
-				</button>
-				{#if hasClipboard && onPasteToRoot}
+					{#if hasClipboard && onPasteToRoot}
 					<button
 						class="flex flex-shrink-0 p-1.5 text-slate-600 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/30 rounded-md transition-colors"
 						onclick={onPasteToRoot}
@@ -475,7 +462,29 @@
 		</div>
 	</div>
 
-	<!-- Search Bar (toggle) -->
+	<!-- Tab Navigation -->
+	<div class="relative flex border-b border-slate-200 dark:border-slate-700">
+		<button
+			onclick={() => { searchVisible = false; }}
+			class="relative flex-1 flex items-center justify-center px-3 py-2 text-xs font-medium transition-colors {!searchVisible ? 'text-violet-600 dark:text-violet-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}"
+		>
+			Explorer
+			{#if !searchVisible}
+				<span class="absolute bottom-0 inset-x-0 h-px bg-violet-600 dark:bg-violet-400"></span>
+			{/if}
+		</button>
+		<button
+			onclick={switchToSearch}
+			class="relative flex-1 flex items-center justify-center px-3 py-2 text-xs font-medium transition-colors {searchVisible ? 'text-violet-600 dark:text-violet-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}"
+		>
+			Search
+			{#if searchVisible}
+				<span class="absolute bottom-0 inset-x-0 h-px bg-violet-600 dark:bg-violet-400"></span>
+			{/if}
+		</button>
+	</div>
+
+	<!-- Search Bar -->
 	{#if searchVisible}
 		<div class="px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
 			<!-- Search Input -->

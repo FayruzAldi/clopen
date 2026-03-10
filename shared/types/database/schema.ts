@@ -107,6 +107,24 @@ export interface MessageSnapshot {
 	branch_id?: string | null; // Branch identifier for multi-branch redo
 	// Blob store format (new): tree hash for content-addressable storage
 	tree_hash?: string | null; // When set, snapshot uses blob store (files in ~/.clopen/snapshots/)
+	// Session-scoped changes: { filepath: { oldHash, newHash } }
+	session_changes?: string | null; // JSON string of SessionScopedChanges
+}
+
+/**
+ * Session-scoped file change entry for a single file
+ */
+export interface SessionFileChange {
+	oldHash: string; // Hash of file content before change
+	newHash: string; // Hash of file content after change
+}
+
+/**
+ * Session-scoped changes map: filepath → { oldHash, newHash }
+ * Used for session-scoped restore and conflict detection
+ */
+export interface SessionScopedChanges {
+	[filepath: string]: SessionFileChange;
 }
 
 /**

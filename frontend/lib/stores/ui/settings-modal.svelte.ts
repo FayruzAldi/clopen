@@ -11,7 +11,8 @@ export type SettingsSection =
 	| 'appearance'
 	| 'user'
 	| 'notifications'
-	| 'general';
+	| 'general'
+	| 'admin';
 
 interface SettingsModalState {
 	isOpen: boolean;
@@ -19,12 +20,15 @@ interface SettingsModalState {
 }
 
 // Settings sections metadata
-export const settingsSections: Array<{
+export interface SettingsSectionMeta {
 	id: SettingsSection;
 	label: string;
 	icon: IconName;
 	description: string;
-}> = [
+	adminOnly?: boolean;
+}
+
+export const settingsSections: SettingsSectionMeta[] = [
 	{
 		id: 'model',
 		label: 'Model',
@@ -35,19 +39,14 @@ export const settingsSections: Array<{
 		id: 'engines',
 		label: 'AI Engine',
 		icon: 'lucide:bot',
-		description: 'Installation and accounts'
+		description: 'Installation and accounts',
+		adminOnly: true
 	},
 	{
 		id: 'appearance',
 		label: 'Appearance',
 		icon: 'lucide:palette',
 		description: 'Theme and layout customization'
-	},
-	{
-		id: 'user',
-		label: 'User',
-		icon: 'lucide:user',
-		description: 'User profile settings'
 	},
 	{
 		id: 'notifications',
@@ -59,7 +58,21 @@ export const settingsSections: Array<{
 		id: 'general',
 		label: 'General',
 		icon: 'lucide:settings-2',
-		description: 'Data management and security'
+		description: 'Data management and security',
+		adminOnly: true
+	},
+	{
+		id: 'admin',
+		label: 'Admin',
+		icon: 'lucide:shield',
+		description: 'Team and invite management',
+		adminOnly: true
+	},
+	{
+		id: 'user',
+		label: 'User Profile',
+		icon: 'lucide:user',
+		description: 'Your profile and account'
 	}
 ];
 

@@ -1,8 +1,12 @@
 <script lang="ts">
-	import { settings, updateSettings } from '$frontend/lib/stores/features/settings.svelte';
+	import { systemSettings, updateSystemSettings } from '$frontend/lib/stores/features/settings.svelte';
+	import { authStore } from '$frontend/lib/stores/features/auth.svelte';
 	import Icon from '../../common/Icon.svelte';
 	import Dialog from '../../common/Dialog.svelte';
 	import { detectPlatform } from '$frontend/lib/utils/platform';
+
+	const isAdmin = $derived(authStore.isAdmin);
+	const settings = $derived(systemSettings);
 
 	let showAddPathDialog = $state(false);
 	let newPathValue = $state('');
@@ -29,7 +33,7 @@
 	function addPath() {
 		const path = newPathValue.trim();
 		if (path && !settings.allowedBasePaths.includes(path)) {
-			updateSettings({ allowedBasePaths: [...settings.allowedBasePaths, path] });
+			updateSystemSettings({ allowedBasePaths: [...settings.allowedBasePaths, path] });
 		}
 		newPathValue = '';
 		showAddPathDialog = false;
@@ -38,7 +42,7 @@
 	function removePath(index: number) {
 		const newPaths = [...settings.allowedBasePaths];
 		newPaths.splice(index, 1);
-		updateSettings({ allowedBasePaths: newPaths });
+		updateSystemSettings({ allowedBasePaths: newPaths });
 		if (editingIndex === index) {
 			editingIndex = null;
 			editingValue = '';
@@ -56,7 +60,7 @@
 		if (path) {
 			const newPaths = [...settings.allowedBasePaths];
 			newPaths[editingIndex] = path;
-			updateSettings({ allowedBasePaths: newPaths });
+			updateSystemSettings({ allowedBasePaths: newPaths });
 		}
 		editingIndex = null;
 		editingValue = '';
@@ -73,6 +77,7 @@
 	}
 </script>
 
+{#if isAdmin}
 <div class="py-1">
 	<h3 class="text-base font-bold text-slate-900 dark:text-slate-100 mb-1.5">Advanced</h3>
 	<p class="text-sm text-slate-600 dark:text-slate-500 mb-5">Security and access control settings</p>
@@ -170,6 +175,7 @@
 		</div>
 	</div>
 </div>
+{/if}
 
 <Dialog
 	bind:isOpen={showAddPathDialog}

@@ -5,6 +5,7 @@
 	import { projectState } from '$frontend/lib/stores/core/projects.svelte';
 	import { showError, showInfo } from '$frontend/lib/stores/ui/notification.svelte';
 	import { debug } from '$shared/utils/logger';
+	import { settings } from '$frontend/lib/stores/features/settings.svelte';
 	import ws from '$frontend/lib/utils/ws';
 	import { getFileIcon } from '$frontend/lib/utils/file-icon-mappings';
 	import { getGitStatusLabel, getGitStatusColor } from '$frontend/lib/utils/git-status';
@@ -65,9 +66,6 @@
 	let showCreateTagForm = $state(false);
 	let newTagName = $state('');
 	let newTagMessage = $state('');
-
-	// More menu state (for Stash/Tags)
-	let showMoreMenu = $state(false);
 
 	// Tab system (like Files panel)
 	interface DiffTab {
@@ -131,7 +129,7 @@
 	// Container width for responsive layout (same threshold as Files: 800)
 	let containerRef = $state<HTMLDivElement | null>(null);
 	let containerWidth = $state(0);
-	const TWO_COLUMN_THRESHOLD = 800;
+	const TWO_COLUMN_THRESHOLD = $derived(Math.round(600 * (settings.fontSize / 13)));
 	const isTwoColumnMode = $derived(containerWidth >= TWO_COLUMN_THRESHOLD);
 
 	// Track last project for re-fetch
@@ -1052,12 +1050,21 @@
 		gitStatus.staged.length + allChanges.length + gitStatus.conflicted.length
 	);
 
+	// View tabs config for tab bar
+	const viewTabs = $derived([
+		{ id: 'changes' as const, label: 'Changes', icon: 'lucide:file-pen' as IconName, badge: totalChanges > 0 ? totalChanges : null },
+		{ id: 'log' as const, label: 'History', icon: 'lucide:history' as IconName, badge: null },
+		{ id: 'stash' as const, label: 'Stash', icon: 'lucide:archive' as IconName, badge: stashEntries.length > 0 ? stashEntries.length : null },
+		{ id: 'tags' as const, label: 'Tags', icon: 'lucide:tag' as IconName, badge: tags.length > 0 ? tags.length : null }
+	]);
+
 	// Exported panel actions for PanelHeader
 	export const panelActions = {
 		push: handlePush,
 		pull: handlePull,
 		fetch: handleFetch,
 		init: handleInit,
+		openBranchManager: () => { showBranchManager = true; },
 		getBranchInfo: () => branchInfo,
 		getIsRepo: () => isRepo,
 		getIsFetching: () => isFetching,
@@ -1101,97 +1108,32 @@
 	{/if}
 {/snippet}
 
-<!-- Changes list snippet -->
-{#snippet changesList()}
-	<!-- View tabs with branch switch -->
-	<div class="flex items-center gap-1 px-2 py-1.5 border-b border-slate-100 dark:border-slate-800">
-		<button
-			type="button"
-			class="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-slate-100 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-violet-500/10 hover:text-violet-600 transition-colors cursor-pointer border-none min-w-0"
-			onclick={() => showBranchManager = true}
-			title="Switch Branch"
-		>
-			<Icon name="lucide:git-branch" class="w-3.5 h-3.5 shrink-0" />
-			<span class="truncate max-w-24">{branchInfo?.current || '...'}</span>
-		</button>
-
-		<div class="flex-1"></div>
-
-		<!-- Primary tabs: Changes & History -->
-		<button
-			type="button"
-			class="px-2 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer border-none
-				{activeView === 'changes'
-					? 'bg-violet-500/10 text-violet-600'
-					: 'bg-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
-			onclick={() => { switchToView('changes'); showMoreMenu = false; }}
-		>
-			Changes{totalChanges > 0 ? ` (${totalChanges})` : ''}
-		</button>
-		<button
-			type="button"
-			class="px-2 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer border-none
-				{activeView === 'log'
-					? 'bg-violet-500/10 text-violet-600'
-					: 'bg-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}"
-			onclick={() => { switchToView('log'); showMoreMenu = false; }}
-		>
-			History
-		</button>
-
-		<!-- More menu (Stash, Tags) -->
-		<div class="relative">
+<!-- View tabs snippet (always visible, even in single-column diff mode) -->
+{#snippet viewTabBar()}
+	<div class="relative flex border-b border-slate-200 dark:border-slate-700">
+		{#each viewTabs as tab (tab.id)}
+			{@const isActive = activeView === tab.id}
 			<button
 				type="button"
-				class="flex items-center justify-center w-7 h-7 rounded-md transition-colors cursor-pointer border-none
-					{activeView === 'stash' || activeView === 'tags'
-						? 'bg-violet-500/10 text-violet-600'
-						: 'bg-transparent text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}"
-				onclick={() => showMoreMenu = !showMoreMenu}
-				title="More views"
+				class="relative flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors {isActive
+					? 'text-violet-600 dark:text-violet-400'
+					: 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}"
+				onclick={() => switchToView(tab.id)}
 			>
-				<Icon name="lucide:ellipsis" class="w-4 h-4" />
+				{tab.label}
+				{#if tab.badge}
+					<span class="min-w-4 h-4 px-1 rounded-full bg-violet-500/15 dark:bg-violet-500/25 text-3xs font-semibold flex items-center justify-center">{tab.badge}</span>
+				{/if}
+				{#if isActive}
+					<span class="absolute bottom-0 inset-x-0 h-px bg-violet-600 dark:bg-violet-400"></span>
+				{/if}
 			</button>
-
-			{#if showMoreMenu}
-				<div
-					class="fixed inset-0 z-40"
-					onclick={() => showMoreMenu = false}
-				></div>
-				<div class="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg py-1 min-w-32">
-					<button
-						type="button"
-						class="flex items-center gap-2 w-full px-3 py-1.5 text-xs font-medium text-left transition-colors cursor-pointer border-none
-							{activeView === 'stash'
-								? 'bg-violet-500/10 text-violet-600'
-								: 'bg-transparent text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}"
-						onclick={() => { switchToView('stash'); showMoreMenu = false; }}
-					>
-						<Icon name="lucide:archive" class="w-3.5 h-3.5" />
-						Stash
-						{#if stashEntries.length > 0}
-							<span class="ml-auto text-3xs font-semibold text-slate-400">{stashEntries.length}</span>
-						{/if}
-					</button>
-					<button
-						type="button"
-						class="flex items-center gap-2 w-full px-3 py-1.5 text-xs font-medium text-left transition-colors cursor-pointer border-none
-							{activeView === 'tags'
-								? 'bg-violet-500/10 text-violet-600'
-								: 'bg-transparent text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}"
-						onclick={() => { switchToView('tags'); showMoreMenu = false; }}
-					>
-						<Icon name="lucide:tag" class="w-3.5 h-3.5" />
-						Tags
-						{#if tags.length > 0}
-							<span class="ml-auto text-3xs font-semibold text-slate-400">{tags.length}</span>
-						{/if}
-					</button>
-				</div>
-			{/if}
-		</div>
+		{/each}
 	</div>
+{/snippet}
 
+<!-- Changes list snippet -->
+{#snippet changesList()}
 	{#if activeView === 'changes'}
 		<!-- Commit form -->
 		<CommitForm
@@ -1252,7 +1194,7 @@
 		/>
 	{:else if activeView === 'stash'}
 		<!-- Stash View -->
-		<div class="flex-1 overflow-y-auto">
+		<div class="flex-1 overflow-y-auto pt-2">
 			<!-- Stash save button/form -->
 			<div class="px-2 pb-2">
 				{#if showStashSaveForm}
@@ -1336,7 +1278,7 @@
 		</div>
 	{:else if activeView === 'tags'}
 		<!-- Tags View -->
-		<div class="flex-1 overflow-y-auto">
+		<div class="flex-1 overflow-y-auto pt-2">
 			<!-- Create tag button/form -->
 			<div class="px-2 pb-2">
 				{#if showCreateTagForm}
@@ -1501,16 +1443,17 @@
 		<div class="flex-1 overflow-hidden">
 			<!-- Unified layout: always render both panels to preserve state (like Files panel) -->
 			<div class="h-full flex">
-				<!-- Left panel: Changes list (w-80 like Files panel tree) -->
+				<!-- Left panel: Changes list -->
 				<div
 					class={isTwoColumnMode
-						? 'w-80 flex-shrink-0 h-full overflow-hidden border-r border-slate-200 dark:border-slate-700 flex flex-col'
+						? 'w-72 flex-shrink-0 h-full overflow-hidden border-r border-slate-200 dark:border-slate-700 flex flex-col'
 						: (viewMode === 'list' ? 'w-full h-full overflow-hidden flex flex-col' : 'hidden')}
 				>
+					{@render viewTabBar()}
 					{@render changesList()}
 				</div>
 
-				<!-- Right panel: Diff viewer (like Files panel editor) -->
+				<!-- Right panel: Diff viewer -->
 				<div
 					class={isTwoColumnMode
 						? 'flex-1 h-full overflow-hidden flex flex-col'

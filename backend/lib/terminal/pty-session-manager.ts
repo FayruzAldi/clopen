@@ -28,11 +28,9 @@ export interface PtySession {
 
 class PtySessionManager {
 	private sessions = new Map<string, PtySession>();
-	private cleanupInterval: Timer | null = null;
 
 	constructor() {
-		// Start cleanup interval (remove sessions inactive for >1 hour)
-		this.startCleanupInterval();
+		// Sessions stay alive indefinitely until user closes the terminal tab
 	}
 
 	/**
@@ -324,39 +322,10 @@ class PtySessionManager {
 	}
 
 	/**
-	 * Start cleanup interval
-	 */
-	private startCleanupInterval() {
-		// Run every 15 minutes
-		this.cleanupInterval = setInterval(() => {
-			this.cleanupInactiveSessions();
-		}, 15 * 60 * 1000);
-	}
-
-	/**
-	 * Cleanup inactive sessions (>1 hour no activity)
-	 */
-	private cleanupInactiveSessions() {
-		const now = new Date();
-		const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-
-		for (const [sessionId, session] of this.sessions.entries()) {
-			if (session.lastActivityAt < oneHourAgo) {
-				debug.log('terminal', `🧹 Cleaning up inactive session: ${sessionId}`);
-				this.killSession(sessionId);
-			}
-		}
-	}
-
-	/**
 	 * Cleanup all sessions (on shutdown)
 	 */
 	dispose() {
 		debug.log('terminal', '🧹 Disposing all PTY sessions');
-
-		if (this.cleanupInterval) {
-			clearInterval(this.cleanupInterval);
-		}
 
 		for (const sessionId of this.sessions.keys()) {
 			this.killSession(sessionId, 'SIGKILL');

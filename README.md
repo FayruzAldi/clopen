@@ -18,6 +18,7 @@
 - **Integrated Terminal** - Multi-tab terminal with full PTY control
 - **File Management** - Directory browsing, live editing, and real-time file watching
 - **Git Management** - Full source control: staging, commits, branches, push/pull, stash, log, conflict resolution
+- **Invite-Based Authentication** - Admin/member roles, invite links with auto-expiry, rate-limited login, CLI token recovery
 - **Real-time Collaboration** - Multiple users can work on the same project simultaneously
 - **Built-in Cloudflare Tunnel** - Expose local projects publicly for testing and sharing
 
@@ -39,10 +40,16 @@ bun add -g @myrialabs/clopen
 ### Update
 
 ```bash
+clopen update
+```
+
+Or manually via Bun:
+
+```bash
 bun add -g @myrialabs/clopen
 ```
 
-Same command as installation — Bun will update to the latest version.
+You can also update from the **Settings > General > Updates** section in the web UI.
 
 ### Usage
 
@@ -51,6 +58,20 @@ clopen
 ```
 
 Starts the server on `http://localhost:9141`.
+
+### Authentication
+
+On first launch, you'll be prompted to set up an admin account. After setup, you'll receive a **Personal Access Token (PAT)** — save it securely, as it's your login credential.
+
+To invite team members, go to **Settings > Admin > Invite** and generate an invite link (valid for 15 minutes).
+
+If you lose your admin token:
+
+```bash
+clopen reset-pat
+```
+
+This regenerates and displays a new admin PAT.
 
 ---
 

@@ -38,6 +38,11 @@ const BINARY_ACTIONS = new Set<string>([
 // ============================================================================
 
 /**
+ * Connection status for external consumers
+ */
+export type WSConnectionStatus = 'connected' | 'disconnected' | 'reconnecting';
+
+/**
  * WebSocket client options
  */
 export interface WSClientOptions {
@@ -49,6 +54,8 @@ export interface WSClientOptions {
 	reconnectDelay?: number;
 	/** Maximum reconnect delay in ms */
 	maxReconnectDelay?: number;
+	/** Callback when connection status changes */
+	onStatusChange?: (status: WSConnectionStatus, reconnectAttempts: number) => void;
 }
 
 // ============================================================================
@@ -197,7 +204,7 @@ function decodeBinaryMessage(buffer: ArrayBuffer): { action: string; payload: an
 export class WSClient<TAPI extends { client: any; server: any }> {
 	private ws: WebSocket | null = null;
 	private url: string;
-	private options: Required<WSClientOptions>;
+	private options: Required<Omit<WSClientOptions, 'onStatusChange'>> & Pick<WSClientOptions, 'onStatusChange'>;
 	private reconnectAttempts = 0;
 	private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 	private listeners = new Map<string, Set<(payload: any) => void>>();
@@ -214,6 +221,9 @@ export class WSClient<TAPI extends { client: any; server: any }> {
 		projectId: null
 	};
 
+	/** Session token for re-authentication on reconnection */
+	private sessionToken: string | null = null;
+
 	/** Pending context sync (for reconnection) */
 	private pendingContextSync = false;
 
@@ -226,7 +236,8 @@ export class WSClient<TAPI extends { client: any; server: any }> {
 			autoReconnect: options.autoReconnect ?? true,
 			maxReconnectAttempts: options.maxReconnectAttempts ?? 5,
 			reconnectDelay: options.reconnectDelay ?? 1000,
-			maxReconnectDelay: options.maxReconnectDelay ?? 30000
+			maxReconnectDelay: options.maxReconnectDelay ?? 30000,
+			onStatusChange: options.onStatusChange ?? undefined
 		};
 
 		this.connect();
@@ -262,9 +273,20 @@ export class WSClient<TAPI extends { client: any; server: any }> {
 				debug.log('websocket', 'Connected');
 				this.isConnected = true;
 				this.reconnectAttempts = 0;
+				this.options.onStatusChange?.('connected', 0);
 
-				// Sync context on reconnection - MUST await before flushing queue
-				if (this.context.userId || this.context.projectId) {
+				// Re-authenticate on reconnection using stored session token
+				if (this.sessionToken) {
+					try {
+						await this.http('auth:login' as any, { token: this.sessionToken } as any);
+						debug.log('websocket', 'Re-authenticated after reconnection');
+					} catch (err) {
+						debug.error('websocket', 'Failed to re-authenticate on reconnection:', err);
+					}
+				}
+
+				// Sync project context on reconnection (userId set by auth above)
+				if (this.context.projectId) {
 					try {
 						await this.syncContext();
 						debug.log('websocket', 'Context synced after reconnection');
@@ -320,7 +342,10 @@ export class WSClient<TAPI extends { client: any; server: any }> {
 
 				// Auto-reconnect
 				if (this.shouldReconnect && this.options.autoReconnect) {
+					this.options.onStatusChange?.('reconnecting', this.reconnectAttempts);
 					this.scheduleReconnect();
+				} else {
+					this.options.onStatusChange?.('disconnected', this.reconnectAttempts);
 				}
 			};
 		} catch (err) {
@@ -389,6 +414,7 @@ export class WSClient<TAPI extends { client: any; server: any }> {
 	private scheduleReconnect(): void {
 		if (this.options.maxReconnectAttempts > 0 && this.reconnectAttempts >= this.options.maxReconnectAttempts) {
 			debug.error('websocket', 'Max reconnect attempts reached');
+			this.options.onStatusChange?.('disconnected', this.reconnectAttempts);
 			return;
 		}
 
@@ -399,6 +425,7 @@ export class WSClient<TAPI extends { client: any; server: any }> {
 		);
 
 		debug.log('websocket', `Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+		this.options.onStatusChange?.('reconnecting', this.reconnectAttempts);
 
 		this.reconnectTimeout = setTimeout(() => {
 			this.connect();
@@ -556,18 +583,23 @@ export class WSClient<TAPI extends { client: any; server: any }> {
 	private contextSyncPromise: Promise<void> | null = null;
 
 	/**
-	 * Set user context (auto-syncs with server)
-	 * @returns Promise that resolves when context is synced with server
+	 * Set session token for reconnection auth.
+	 * Called by auth store after successful login.
+	 */
+	setSessionToken(token: string | null): void {
+		this.sessionToken = token;
+		debug.log('websocket', 'Session token set for reconnection auth');
+	}
+
+	/**
+	 * Set user context locally (for reconnection tracking).
+	 * userId is now set server-side by auth handlers — this only updates the local cache.
 	 */
 	async setUser(userId: string | null): Promise<void> {
 		if (this.context.userId === userId) return;
-
 		this.context.userId = userId;
-		debug.log('websocket', 'Context: user set to', userId);
-
-		if (this.isConnected) {
-			await this.syncContext();
-		}
+		debug.log('websocket', 'Context: user set locally to', userId);
+		// Note: userId is NOT synced via ws:set-context — it's set server-side by auth handlers
 	}
 
 	/**
@@ -665,16 +697,15 @@ export class WSClient<TAPI extends { client: any; server: any }> {
 			// Register response listener
 			unsubResponse = this.on('ws:set-context:response' as any, handleResponse);
 
-			// Send context sync request
+			// Send context sync request (only projectId — userId is set server-side by auth)
 			this.emit('ws:set-context' as any, {
 				requestId,
 				data: {
-					userId: this.context.userId,
 					projectId: this.context.projectId
 				}
 			} as any);
 
-			debug.log('websocket', 'Context sync sent:', this.context);
+			debug.log('websocket', 'Context sync sent: projectId=', this.context.projectId);
 		});
 	}
 

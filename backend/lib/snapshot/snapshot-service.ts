@@ -1,43 +1,76 @@
 /**
- * Snapshot Service for Time Travel Feature
+ * Snapshot Service for Time Travel Feature (v2 - Session-Scoped)
  *
- * Uses git-like content-addressable blob storage for efficient snapshots:
- * - File contents stored as compressed blobs in ~/.clopen/snapshots/blobs/
- * - Each snapshot has a tree file mapping filepath -> blob hash
- * - DB only stores lightweight metadata and hash references
- * - Deduplication: identical file content across snapshots stored once
- * - mtime cache: skip re-reading files that haven't changed
- * - Respects .gitignore rules (via git ls-files or manual parsing)
- * - All files read/written as Buffer (binary-safe for images, PDFs, etc.)
+ * Architecture:
+ * - Session baseline: hash-only scan at session start, background blob storage
+ * - Per-checkpoint delta: only stores files that changed during the stream
+ * - Session-scoped restore: bidirectional (forward + backward) using session_changes
+ * - Cross-session conflict detection: warns when restoring would affect other sessions' changes
+ *
+ * Storage:
+ * - Blob store: ~/.clopen/snapshots/blobs/ (content-addressable, deduped, gzipped)
+ * - DB: lightweight metadata + session_changes JSON
  */
 
 import fs from 'fs/promises';
 import path from 'path';
-import { snapshotQueries } from '../database/queries';
+import { snapshotQueries, sessionQueries, messageQueries } from '../database/queries';
+import { getDatabase } from '../database/index';
 import { blobStore, type TreeMap } from './blob-store';
 import { getSnapshotFiles } from './gitignore';
-import type { MessageSnapshot, DeltaChanges } from '$shared/types/database/schema';
+import { fileWatcher } from '../files/file-watcher';
+import type { MessageSnapshot, SessionScopedChanges } from '$shared/types/database/schema';
 import { calculateFileChangeStats } from '$shared/utils/diff-calculator';
 import { debug } from '$shared/utils/logger';
-
-interface FileSnapshot {
-	[filepath: string]: Buffer; // filepath -> content (Buffer for binary safety)
-}
 
 interface SnapshotMetadata {
 	totalFiles: number;
 	totalSize: number;
 	capturedAt: string;
-	snapshotType: 'full' | 'delta';
+	snapshotType: 'delta';
 	deltaSize?: number;
-	storageFormat?: 'blob-store';
+	storageFormat: 'blob-store';
 }
 
 // Maximum file size to include (5MB)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
+/**
+ * Conflict information for a single file during restore
+ */
+export interface RestoreConflict {
+	filepath: string;
+	modifiedBySessionId: string;
+	modifiedBySnapshotId: string;
+	modifiedAt: string;
+	restoreContent?: string;
+	currentContent?: string;
+}
+
+/**
+ * Result of conflict detection before restore
+ */
+export interface RestoreConflictCheck {
+	hasConflicts: boolean;
+	conflicts: RestoreConflict[];
+	checkpointsToUndo: string[];
+}
+
+/**
+ * User's resolution decision for each conflicting file
+ */
+export interface ConflictResolution {
+	[filepath: string]: 'restore' | 'keep';
+}
+
 export class SnapshotService {
 	private static instance: SnapshotService;
+
+	/**
+	 * Per-session running tree: sessionId → TreeMap
+	 * Updated after each capture and restore.
+	 */
+	private sessionBaselines = new Map<string, TreeMap>();
 
 	private constructor() {}
 
@@ -48,10 +81,64 @@ export class SnapshotService {
 		return SnapshotService.instance;
 	}
 
+	// ========================================================================
+	// Session Baseline
+	// ========================================================================
+
 	/**
-	 * Capture snapshot of current project state using blob store.
-	 * Only changed files are read and stored (mtime cache + hash dedup).
-	 * Respects .gitignore rules for file exclusion.
+	 * Initialize session baseline: hash-only scan + blob storage.
+	 * Called when a session is first activated for a project.
+	 */
+	async initializeSessionBaseline(
+		projectPath: string,
+		sessionId: string
+	): Promise<void> {
+		if (this.sessionBaselines.has(sessionId)) return;
+
+		try {
+			const files = await getSnapshotFiles(projectPath);
+			const baseline: TreeMap = {};
+
+			for (const filepath of files) {
+				try {
+					const stat = await fs.stat(filepath);
+					if (stat.size > MAX_FILE_SIZE) continue;
+
+					const relativePath = path.relative(projectPath, filepath);
+					const normalizedPath = relativePath.replace(/\\/g, '/');
+
+					const result = await blobStore.hashFile(normalizedPath, filepath);
+					baseline[normalizedPath] = result.hash;
+				} catch {
+					// Skip unreadable files
+				}
+			}
+
+			this.sessionBaselines.set(sessionId, baseline);
+			debug.log('snapshot', `Session baseline initialized: ${Object.keys(baseline).length} files for session ${sessionId}`);
+		} catch (error) {
+			debug.error('snapshot', 'Error initializing session baseline:', error);
+		}
+	}
+
+	private async getSessionBaseline(
+		projectPath: string,
+		sessionId: string
+	): Promise<TreeMap> {
+		if (!this.sessionBaselines.has(sessionId)) {
+			await this.initializeSessionBaseline(projectPath, sessionId);
+		}
+		return this.sessionBaselines.get(sessionId) || {};
+	}
+
+	// ========================================================================
+	// Snapshot Capture
+	// ========================================================================
+
+	/**
+	 * Capture snapshot of current project state.
+	 * Only processes files detected as dirty by the file watcher.
+	 * Stores session-scoped changes (oldHash/newHash per file).
 	 */
 	async captureSnapshot(
 		projectPath: string,
@@ -60,75 +147,104 @@ export class SnapshotService {
 		messageId: string
 	): Promise<MessageSnapshot> {
 		try {
-			// Scan files respecting .gitignore (git ls-files or manual parsing)
-			const files = await getSnapshotFiles(projectPath);
+			const dirtyFiles = fileWatcher.getDirtyFiles(projectId);
 
-			// Build current tree: hash each file using blob store
-			const currentTree: TreeMap = {};
-			const readContents = new Map<string, Buffer>();
-			let totalSize = 0;
-
-			for (const filepath of files) {
-				try {
-					const stat = await fs.stat(filepath);
-					if (stat.size > MAX_FILE_SIZE) {
-						debug.warn('snapshot', `Skipping large file: ${filepath} (${stat.size} bytes)`);
-						continue;
-					}
-
-					const relativePath = path.relative(projectPath, filepath);
-					const normalizedPath = relativePath.replace(/\\/g, '/');
-
-					const result = await blobStore.hashFile(normalizedPath, filepath);
-					currentTree[normalizedPath] = result.hash;
-					totalSize += stat.size;
-
-					if (result.content !== null) {
-						readContents.set(normalizedPath, result.content);
-					}
-				} catch (error) {
-					debug.warn('snapshot', `Could not process file ${filepath}:`, error);
-				}
-			}
-
-			// Get previous snapshot's tree for delta computation
 			const previousSnapshots = snapshotQueries.getBySessionId(sessionId);
 			const previousSnapshot = previousSnapshots.length > 0
 				? previousSnapshots[previousSnapshots.length - 1]
 				: null;
 
-			let previousTree: TreeMap = {};
-			if (previousSnapshot) {
-				previousTree = await this.getSnapshotTree(previousSnapshot);
+			// FAST PATH: no file changes detected → skip snapshot
+			if (dirtyFiles.size === 0 && previousSnapshot) {
+				debug.log('snapshot', 'No file changes detected, skipping snapshot');
+				return previousSnapshot;
 			}
 
-			// Compute delta by comparing tree hashes (fast!)
-			const delta = this.calculateTreeDelta(previousTree, currentTree);
-			const deltaSize =
-				Object.keys(delta.added).length +
-				Object.keys(delta.modified).length +
-				delta.deleted.length;
+			// Get previous tree (in-memory baseline)
+			const previousTree = await this.getSessionBaseline(projectPath, sessionId);
 
-			// Calculate line-level file change stats for changed files only
+			// Build current tree incrementally
+			let currentTree: TreeMap;
+			const sessionChanges: SessionScopedChanges = {};
+			const readContents = new Map<string, Buffer>();
+
+			if (dirtyFiles.size === 0 && !previousSnapshot) {
+				// First snapshot ever, no dirty files → initial baseline
+				currentTree = { ...previousTree };
+			} else if (dirtyFiles.size > 0) {
+				// Incremental: start from previous tree, update only dirty files
+				currentTree = { ...previousTree };
+
+				for (const relativePath of dirtyFiles) {
+					const fullPath = path.join(projectPath, relativePath);
+
+					try {
+						const stat = await fs.stat(fullPath);
+						if (stat.size > MAX_FILE_SIZE) {
+							if (currentTree[relativePath]) {
+								const oldHash = currentTree[relativePath];
+								sessionChanges[relativePath] = { oldHash, newHash: '' };
+								delete currentTree[relativePath];
+							}
+							continue;
+						}
+
+						const result = await blobStore.hashFile(relativePath, fullPath);
+						const newHash = result.hash;
+						const oldHash = previousTree[relativePath] || '';
+
+						if (oldHash !== newHash) {
+							currentTree[relativePath] = newHash;
+							sessionChanges[relativePath] = { oldHash, newHash };
+
+							if (result.content !== null) {
+								readContents.set(relativePath, result.content);
+							}
+
+							if (oldHash && !(await blobStore.hasBlob(oldHash))) {
+								debug.warn('snapshot', `Old blob missing for ${relativePath} (${oldHash.slice(0, 8)}), restore may be limited`);
+							}
+						}
+					} catch {
+						// File was deleted
+						if (currentTree[relativePath]) {
+							const oldHash = currentTree[relativePath];
+							sessionChanges[relativePath] = { oldHash, newHash: '' };
+							delete currentTree[relativePath];
+						}
+					}
+				}
+			} else {
+				currentTree = { ...previousTree };
+			}
+
+			fileWatcher.clearDirtyFiles(projectId);
+
+			// If no actual changes after processing, skip
+			if (Object.keys(sessionChanges).length === 0 && previousSnapshot) {
+				debug.log('snapshot', 'No actual file changes after hash comparison, skipping snapshot');
+				return previousSnapshot;
+			}
+
+			// Calculate line-level file change stats
 			const fileStats = await this.calculateChangeStats(
-				previousTree, currentTree, delta, readContents
+				previousTree, currentTree, sessionChanges, readContents
 			);
 
 			const metadata: SnapshotMetadata = {
 				totalFiles: Object.keys(currentTree).length,
-				totalSize,
+				totalSize: 0,
 				capturedAt: new Date().toISOString(),
 				snapshotType: 'delta',
-				deltaSize,
+				deltaSize: Object.keys(sessionChanges).length,
 				storageFormat: 'blob-store'
 			};
 
 			const snapshotId = `snapshot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-			// Store tree file to disk
-			const treeHash = await blobStore.storeTree(snapshotId, currentTree);
+			// Update in-memory baseline
+			this.sessionBaselines.set(sessionId, { ...currentTree });
 
-			// Store lightweight record in DB (no file content!)
 			const dbSnapshot = snapshotQueries.createSnapshot({
 				id: snapshotId,
 				message_id: messageId,
@@ -138,15 +254,16 @@ export class SnapshotService {
 				project_metadata: metadata,
 				snapshot_type: 'delta',
 				parent_snapshot_id: previousSnapshot?.id,
-				delta_changes: delta,
+				delta_changes: {},
 				files_changed: fileStats.filesChanged,
 				insertions: fileStats.insertions,
 				deletions: fileStats.deletions,
-				tree_hash: treeHash
+				tree_hash: undefined,
+				session_changes: sessionChanges
 			});
 
-			const typeLabel = previousSnapshot ? 'delta' : 'initial delta';
-			debug.log('snapshot', `Created ${typeLabel} snapshot [blob-store]: ${deltaSize} changes (${Object.keys(delta.added).length} added, ${Object.keys(delta.modified).length} modified, ${delta.deleted.length} deleted) - ${fileStats.filesChanged} files, +${fileStats.insertions}/-${fileStats.deletions} lines`);
+			const changesCount = Object.keys(sessionChanges).length;
+			debug.log('snapshot', `Snapshot captured: ${changesCount} changes - ${fileStats.filesChanged} files, +${fileStats.insertions}/-${fileStats.deletions} lines`);
 			return dbSnapshot;
 		} catch (error) {
 			debug.error('snapshot', 'Error capturing snapshot:', error);
@@ -154,328 +271,431 @@ export class SnapshotService {
 		}
 	}
 
+	// ========================================================================
+	// Conflict Detection
+	// ========================================================================
+
 	/**
-	 * Calculate delta between two trees by comparing hashes.
+	 * Check for conflicts before restoring to a checkpoint.
+	 * Works bidirectionally (undo and redo).
+	 *
+	 * A conflict occurs when a file that would be changed by the restore
+	 * was also modified by a different session after the reference time.
+	 * Reference time = min(targetTime, currentHeadTime) to cover both directions.
 	 */
-	private calculateTreeDelta(
-		previousTree: TreeMap,
-		currentTree: TreeMap
-	): DeltaChanges {
-		const delta: DeltaChanges = {
-			added: {},
-			modified: {},
-			deleted: []
+	async checkRestoreConflicts(
+		sessionId: string,
+		targetCheckpointMessageId: string | null,
+		projectPath?: string,
+		targetPath?: string[]
+	): Promise<RestoreConflictCheck> {
+		const sessionSnapshots = snapshotQueries.getBySessionId(sessionId);
+		const isInitialRestore = targetCheckpointMessageId === null;
+
+		// Build expected state at target (branch-aware when targetPath is provided)
+		const expectedState = this.buildExpectedState(
+			sessionSnapshots, targetCheckpointMessageId, targetPath
+		);
+
+		if (expectedState.size === 0) {
+			return { hasConflicts: false, conflicts: [], checkpointsToUndo: [] };
+		}
+
+		// Filter out files already in expected state on disk (no actual change needed)
+		if (projectPath) {
+			for (const [filepath, expectedHash] of expectedState) {
+				const fullPath = path.join(projectPath, filepath);
+				let currentHash = '';
+				try {
+					const content = await fs.readFile(fullPath);
+					currentHash = blobStore.hashContent(content);
+				} catch {
+					// File doesn't exist on disk
+					currentHash = '';
+				}
+				if (currentHash === expectedHash) {
+					expectedState.delete(filepath);
+				}
+			}
+
+			if (expectedState.size === 0) {
+				return { hasConflicts: false, conflicts: [], checkpointsToUndo: [] };
+			}
+		}
+
+		// Determine reference time for cross-session conflict check
+		// Use min(targetTime, currentHeadTime) to cover both undo and redo
+		// For initial restore, use the session's created_at or the earliest snapshot time
+		const targetSnapshot = isInitialRestore
+			? null
+			: sessionSnapshots.find(s => s.message_id === targetCheckpointMessageId) || null;
+		const targetTime = targetSnapshot
+			? targetSnapshot.created_at
+			: (sessionSnapshots[0]?.created_at || new Date(0).toISOString());
+		let referenceTime = targetTime;
+
+		const currentHead = sessionQueries.getHead(sessionId);
+		if (currentHead) {
+			// Try direct match (HEAD is a checkpoint message with a snapshot)
+			const directMatch = sessionSnapshots.find(s => s.message_id === currentHead);
+			if (directMatch) {
+				if (directMatch.created_at < targetTime) {
+					referenceTime = directMatch.created_at;
+				}
+			} else {
+				// HEAD is a session end (assistant msg), find its checkpoint snapshot
+				const headMsg = messageQueries.getById(currentHead);
+				if (headMsg) {
+					for (let i = sessionSnapshots.length - 1; i >= 0; i--) {
+						if (sessionSnapshots[i].created_at <= headMsg.timestamp) {
+							if (sessionSnapshots[i].created_at < targetTime) {
+								referenceTime = sessionSnapshots[i].created_at;
+							}
+							break;
+						}
+					}
+				}
+			}
+		}
+
+		// Check for cross-session conflicts
+		const conflicts: RestoreConflict[] = [];
+		const projectId = targetSnapshot
+			? targetSnapshot.project_id
+			: (sessionSnapshots[0]?.project_id || '');
+		const allProjectSnapshots = this.getAllProjectSnapshots(projectId);
+
+		for (const otherSnap of allProjectSnapshots) {
+			if (otherSnap.session_id === sessionId) continue;
+			if (otherSnap.created_at <= referenceTime) continue;
+			if (!otherSnap.session_changes) continue;
+
+			try {
+				const otherChanges = JSON.parse(otherSnap.session_changes) as SessionScopedChanges;
+				for (const filepath of Object.keys(otherChanges)) {
+					if (expectedState.has(filepath)) {
+						conflicts.push({
+							filepath,
+							modifiedBySessionId: otherSnap.session_id,
+							modifiedBySnapshotId: otherSnap.id,
+							modifiedAt: otherSnap.created_at
+						});
+					}
+				}
+			} catch { /* skip malformed */ }
+		}
+
+		// Deduplicate by filepath (keep the most recent)
+		const conflictMap = new Map<string, RestoreConflict>();
+		for (const conflict of conflicts) {
+			const existing = conflictMap.get(conflict.filepath);
+			if (!existing || conflict.modifiedAt > existing.modifiedAt) {
+				conflictMap.set(conflict.filepath, conflict);
+			}
+		}
+
+		const uniqueConflicts = Array.from(conflictMap.values());
+
+		// Populate file contents for diff display
+		if (uniqueConflicts.length > 0 && projectPath) {
+			await Promise.all(uniqueConflicts.map(async (conflict) => {
+				const restoreHash = expectedState.get(conflict.filepath);
+				if (restoreHash) {
+					try {
+						const restoreBuf = await blobStore.readBlob(restoreHash);
+						conflict.restoreContent = restoreBuf.toString('utf-8');
+					} catch {
+						conflict.restoreContent = '(binary or unavailable)';
+					}
+				} else {
+					conflict.restoreContent = '(file would be deleted)';
+				}
+
+				try {
+					const fullPath = path.join(projectPath, conflict.filepath);
+					const currentBuf = await fs.readFile(fullPath);
+					conflict.currentContent = currentBuf.toString('utf-8');
+				} catch {
+					conflict.currentContent = '(file not found on disk)';
+				}
+			}));
+		}
+
+		// Collect affected snapshot IDs
+		const affectedSnapshotIds = sessionSnapshots
+			.filter(s => s.session_changes)
+			.map(s => s.id);
+
+		return {
+			hasConflicts: uniqueConflicts.length > 0,
+			conflicts: uniqueConflicts,
+			checkpointsToUndo: affectedSnapshotIds
 		};
+	}
 
-		for (const [filepath, hash] of Object.entries(currentTree)) {
-			if (!previousTree[filepath]) {
-				delta.added[filepath] = hash;
-			} else if (previousTree[filepath] !== hash) {
-				delta.modified[filepath] = hash;
+	private getAllProjectSnapshots(projectId: string): MessageSnapshot[] {
+		const db = getDatabase();
+		return db.prepare(`
+			SELECT * FROM message_snapshots
+			WHERE project_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
+			ORDER BY created_at ASC
+		`).all(projectId) as MessageSnapshot[];
+	}
+
+	// ========================================================================
+	// Session-Scoped Restore (Bidirectional)
+	// ========================================================================
+
+	/**
+	 * Restore to a checkpoint using session-scoped changes.
+	 * Works in both directions (forward and backward).
+	 *
+	 * When targetPath is provided, uses branch-aware algorithm:
+	 * 1. Only apply changes from snapshots on the path (root → target)
+	 * 2. Revert ALL changes from snapshots on other branches
+	 * 3. Compare expected state with disk and restore if different
+	 * 4. Update in-memory baseline to match restored state
+	 *
+	 * Falls back to linear algorithm when targetPath is not provided.
+	 */
+	async restoreSessionScoped(
+		projectPath: string,
+		sessionId: string,
+		targetCheckpointMessageId: string | null,
+		conflictResolutions?: ConflictResolution,
+		targetPath?: string[]
+	): Promise<{ restoredFiles: number; skippedFiles: number }> {
+		try {
+			const sessionSnapshots = snapshotQueries.getBySessionId(sessionId);
+
+			// Build expected file state at the target checkpoint
+			// Branch-aware when targetPath is provided
+			const expectedState = this.buildExpectedState(
+				sessionSnapshots, targetCheckpointMessageId, targetPath
+			);
+
+			debug.log('snapshot', `Restore to checkpoint: ${expectedState.size} files in expected state`);
+
+			let restoredFiles = 0;
+			let skippedFiles = 0;
+
+			// Update in-memory baseline as we restore
+			const baseline = this.sessionBaselines.get(sessionId) || {};
+
+			for (const [filepath, expectedHash] of expectedState) {
+				// Check conflict resolution
+				if (conflictResolutions && conflictResolutions[filepath] === 'keep') {
+					debug.log('snapshot', `Skipping ${filepath} (user chose to keep)`);
+					skippedFiles++;
+					continue;
+				}
+
+				const fullPath = path.join(projectPath, filepath);
+
+				// Check current disk state
+				let currentHash = '';
+				try {
+					const content = await fs.readFile(fullPath);
+					currentHash = blobStore.hashContent(content);
+				} catch {
+					// File doesn't exist on disk
+					currentHash = '';
+				}
+
+				// Skip if already in expected state
+				if (currentHash === expectedHash) continue;
+
+				if (!expectedHash || expectedHash === '') {
+					// File should not exist at the target → delete it
+					try {
+						await fs.unlink(fullPath);
+						delete baseline[filepath];
+						debug.log('snapshot', `Deleted: ${filepath}`);
+						restoredFiles++;
+					} catch {
+						debug.warn('snapshot', `Could not delete ${filepath}`);
+					}
+				} else {
+					// Restore file content from blob
+					try {
+						const content = await blobStore.readBlob(expectedHash);
+						const dir = path.dirname(fullPath);
+						await fs.mkdir(dir, { recursive: true });
+						await fs.writeFile(fullPath, content);
+						baseline[filepath] = expectedHash;
+						debug.log('snapshot', `Restored: ${filepath}`);
+						restoredFiles++;
+					} catch (err) {
+						debug.warn('snapshot', `Could not restore ${filepath}:`, err);
+						skippedFiles++;
+					}
+				}
+			}
+
+			// Update in-memory baseline to reflect restored state
+			this.sessionBaselines.set(sessionId, baseline);
+
+			debug.log('snapshot', `Restore complete: ${restoredFiles} restored, ${skippedFiles} skipped`);
+			return { restoredFiles, skippedFiles };
+		} catch (error) {
+			debug.error('snapshot', 'Error in session-scoped restore:', error);
+			throw new Error(`Failed to restore: ${error}`);
+		}
+	}
+
+	// ========================================================================
+	// Helpers
+	// ========================================================================
+
+	/**
+	 * Build the expected file state map for a restore operation.
+	 *
+	 * Branch-aware algorithm (when targetPath is provided):
+	 * 1. Separate snapshots into path (root→target) vs non-path
+	 * 2. Forward walk: only apply newHash from snapshots on the path (in path order)
+	 * 3. Revert walk: revert ALL non-path snapshots using oldHash (first-wins)
+	 *
+	 * This correctly handles multi-branch checkpoint trees by NOT including
+	 * changes from other branches in the forward walk.
+	 *
+	 * Fallback linear algorithm (when targetPath is not provided):
+	 * Walks all snapshots chronologically — only correct for single-branch paths.
+	 */
+	private buildExpectedState(
+		sessionSnapshots: MessageSnapshot[],
+		targetCheckpointMessageId: string | null,
+		targetPath?: string[]
+	): Map<string, string> {
+		const expectedState = new Map<string, string>();
+		const isInitialRestore = targetCheckpointMessageId === null;
+
+		if (isInitialRestore) {
+			// Revert ALL snapshots → everything goes back to oldHash (first-wins)
+			for (const snap of sessionSnapshots) {
+				if (!snap.session_changes) continue;
+				try {
+					const changes = JSON.parse(snap.session_changes as string) as SessionScopedChanges;
+					for (const [filepath, change] of Object.entries(changes)) {
+						if (!expectedState.has(filepath)) {
+							expectedState.set(filepath, change.oldHash);
+						}
+					}
+				} catch { /* skip malformed */ }
+			}
+		} else if (targetPath && targetPath.length > 0) {
+			// Branch-aware restore: only include snapshots on the path from root to target
+			const pathSet = new Set(targetPath);
+
+			// Separate snapshots into path vs non-path
+			const snapshotByMsgId = new Map<string, MessageSnapshot>();
+			const nonPathSnapshots: MessageSnapshot[] = [];
+
+			for (const snap of sessionSnapshots) {
+				if (pathSet.has(snap.message_id)) {
+					snapshotByMsgId.set(snap.message_id, snap);
+				} else {
+					nonPathSnapshots.push(snap);
+				}
+			}
+
+			// Forward walk: apply path snapshots in path order (root → target)
+			// Later path snapshots overwrite earlier ones for the same file (correct)
+			for (const cpId of targetPath) {
+				const snap = snapshotByMsgId.get(cpId);
+				if (!snap?.session_changes) continue;
+				try {
+					const changes = JSON.parse(snap.session_changes as string) as SessionScopedChanges;
+					for (const [filepath, change] of Object.entries(changes)) {
+						expectedState.set(filepath, change.newHash);
+					}
+				} catch { /* skip malformed */ }
+			}
+
+			// Revert all non-path snapshots (changes on other branches)
+			// Process in chronological order with first-wins semantics:
+			// if two non-path snapshots change the same file, the earliest one's
+			// oldHash is used (state before any branch diverged)
+			for (const snap of nonPathSnapshots) {
+				if (!snap.session_changes) continue;
+				try {
+					const changes = JSON.parse(snap.session_changes as string) as SessionScopedChanges;
+					for (const [filepath, change] of Object.entries(changes)) {
+						if (!expectedState.has(filepath)) {
+							expectedState.set(filepath, change.oldHash);
+						}
+					}
+				} catch { /* skip malformed */ }
+			}
+		} else {
+			// Fallback: linear algorithm (no path info available)
+			const targetIndex = sessionSnapshots.findIndex(
+				s => s.message_id === targetCheckpointMessageId
+			);
+
+			if (targetIndex === -1) {
+				debug.warn('snapshot', 'Target checkpoint snapshot not found (linear fallback)');
+				return expectedState;
+			}
+
+			for (let i = 0; i <= targetIndex; i++) {
+				const snap = sessionSnapshots[i];
+				if (!snap.session_changes) continue;
+				try {
+					const changes = JSON.parse(snap.session_changes as string) as SessionScopedChanges;
+					for (const [filepath, change] of Object.entries(changes)) {
+						expectedState.set(filepath, change.newHash);
+					}
+				} catch { /* skip malformed */ }
+			}
+
+			for (let i = targetIndex + 1; i < sessionSnapshots.length; i++) {
+				const snap = sessionSnapshots[i];
+				if (!snap.session_changes) continue;
+				try {
+					const changes = JSON.parse(snap.session_changes as string) as SessionScopedChanges;
+					for (const [filepath, change] of Object.entries(changes)) {
+						if (!expectedState.has(filepath)) {
+							expectedState.set(filepath, change.oldHash);
+						}
+					}
+				} catch { /* skip malformed */ }
 			}
 		}
 
-		for (const filepath of Object.keys(previousTree)) {
-			if (!currentTree[filepath]) {
-				delta.deleted.push(filepath);
-			}
-		}
-
-		return delta;
+		return expectedState;
 	}
 
 	/**
 	 * Calculate line-level change stats for changed files.
-	 * Only reads blob content for files that actually changed.
 	 */
 	private async calculateChangeStats(
 		previousTree: TreeMap,
 		currentTree: TreeMap,
-		delta: DeltaChanges,
+		sessionChanges: SessionScopedChanges,
 		readContents: Map<string, Buffer>
 	): Promise<{ filesChanged: number; insertions: number; deletions: number }> {
 		const previousSnapshot: Record<string, Buffer> = {};
 		const currentSnapshot: Record<string, Buffer> = {};
 
-		for (const filepath of Object.keys(delta.added)) {
-			const hash = currentTree[filepath];
-			currentSnapshot[filepath] = readContents.get(filepath) ?? await blobStore.readBlob(hash);
-		}
-
-		for (const filepath of Object.keys(delta.modified)) {
-			const oldHash = previousTree[filepath];
-			const newHash = currentTree[filepath];
-			previousSnapshot[filepath] = await blobStore.readBlob(oldHash);
-			currentSnapshot[filepath] = readContents.get(filepath) ?? await blobStore.readBlob(newHash);
-		}
-
-		for (const filepath of delta.deleted) {
-			const oldHash = previousTree[filepath];
-			if (oldHash) {
-				previousSnapshot[filepath] = await blobStore.readBlob(oldHash);
-			}
+		for (const [filepath, change] of Object.entries(sessionChanges)) {
+			try {
+				if (change.oldHash) {
+					previousSnapshot[filepath] = await blobStore.readBlob(change.oldHash);
+				}
+				if (change.newHash) {
+					currentSnapshot[filepath] = readContents.get(filepath) ?? await blobStore.readBlob(change.newHash);
+				}
+			} catch { /* skip */ }
 		}
 
 		return calculateFileChangeStats(previousSnapshot, currentSnapshot);
 	}
 
 	/**
-	 * Get the tree map for a snapshot.
-	 * New format: read from tree file on disk.
-	 * Old format: reconstruct from delta chain in DB.
+	 * Clean up session baseline cache when session is no longer active.
 	 */
-	private async getSnapshotTree(snapshot: MessageSnapshot): Promise<TreeMap> {
-		if (snapshot.tree_hash) {
-			try {
-				return await blobStore.readTree(snapshot.id);
-			} catch (err) {
-				debug.warn('snapshot', `Could not read tree file for ${snapshot.id}, falling back to chain replay:`, err);
-			}
-		}
-
-		// Old format: reconstruct complete state from delta chain (returns string content)
-		const fileSnapshot = await this.reconstructSnapshotLegacy(snapshot);
-
-		// Convert legacy FileSnapshot to TreeMap by hashing and storing each file as blob
-		const tree: TreeMap = {};
-		for (const [filepath, content] of Object.entries(fileSnapshot)) {
-			const hash = await blobStore.storeBlob(content);
-			tree[filepath] = hash;
-		}
-		return tree;
-	}
-
-	/**
-	 * Restore project to a previous snapshot.
-	 * Only modifies files that are different from current state.
-	 * Uses .gitignore-aware scanning for current state comparison.
-	 */
-	async restoreSnapshot(
-		projectPath: string,
-		snapshot: MessageSnapshot
-	): Promise<void> {
-		try {
-			const targetState = await this.reconstructSnapshot(snapshot);
-
-			// Scan current files respecting .gitignore
-			const currentFiles = await getSnapshotFiles(projectPath);
-			const currentState = await this.createFileSnapshot(projectPath, currentFiles);
-
-			let restoredCount = 0;
-			let deletedCount = 0;
-
-			debug.log('snapshot', 'SNAPSHOT RESTORE START');
-			debug.log('snapshot', `Snapshot ID: ${snapshot.id}`);
-			debug.log('snapshot', `Message ID: ${snapshot.message_id}`);
-			debug.log('snapshot', `Project path: ${projectPath}`);
-			debug.log('snapshot', `Target state files: ${Object.keys(targetState).length}`);
-			debug.log('snapshot', `Current state files: ${currentFiles.length}`);
-
-			// Delete files that exist now but not in target state
-			for (const currentFile of currentFiles) {
-				const relativePath = path.relative(projectPath, currentFile);
-				const normalizedPath = relativePath.replace(/\\/g, '/');
-
-				if (!targetState[normalizedPath]) {
-					try {
-						await fs.unlink(currentFile);
-						debug.log('snapshot', `Deleted: ${currentFile}`);
-						deletedCount++;
-					} catch (err) {
-						debug.warn('snapshot', `Could not delete ${currentFile}:`, err);
-					}
-				}
-			}
-
-			// Write only files that are different or don't exist
-			for (const [relativePath, targetContent] of Object.entries(targetState)) {
-				const fullPath = path.join(projectPath, relativePath);
-				const currentContent = currentState[relativePath];
-
-				// Compare as Buffer (binary-safe comparison)
-				const isDifferent = !currentContent || !currentContent.equals(targetContent);
-
-				if (isDifferent) {
-					const dir = path.dirname(fullPath);
-					await fs.mkdir(dir, { recursive: true });
-					// Write as Buffer directly — no encoding, preserves binary files
-					await fs.writeFile(fullPath, targetContent);
-
-					const action = currentContent === undefined ? 'Created' : 'Modified';
-					debug.log('snapshot', `${action}: ${fullPath}`);
-					restoredCount++;
-				}
-			}
-
-			debug.log('snapshot', `Project restored successfully: ${restoredCount} files restored, ${deletedCount} files deleted`);
-			debug.log('snapshot', 'SNAPSHOT RESTORE COMPLETE');
-		} catch (error) {
-			debug.error('snapshot', 'Error restoring snapshot:', error);
-			throw new Error(`Failed to restore snapshot: ${error}`);
-		}
-	}
-
-	/**
-	 * Reconstruct the complete file state from a snapshot.
-	 * New format (tree_hash): Read tree -> resolve blobs (O(1), no chain replay).
-	 * Old format: Replay delta chain from root (legacy).
-	 */
-	private async reconstructSnapshot(snapshot: MessageSnapshot): Promise<FileSnapshot> {
-		if (snapshot.tree_hash) {
-			try {
-				const tree = await blobStore.readTree(snapshot.id);
-				return await blobStore.resolveTree(tree);
-			} catch (err) {
-				debug.warn('snapshot', `Could not resolve tree for ${snapshot.id}, falling back to legacy:`, err);
-			}
-		}
-
-		return this.reconstructSnapshotLegacy(snapshot);
-	}
-
-	/**
-	 * Legacy reconstruction: replay all deltas from root to target snapshot.
-	 */
-	private async reconstructSnapshotLegacy(snapshot: MessageSnapshot): Promise<FileSnapshot> {
-		const chain = await this.getSnapshotChain(snapshot);
-		let state: FileSnapshot = {};
-
-		for (const deltaSnapshot of chain) {
-			if (!deltaSnapshot.delta_changes) {
-				debug.warn('snapshot', `Delta snapshot ${deltaSnapshot.id} missing delta_changes`);
-				continue;
-			}
-
-			const delta = JSON.parse(deltaSnapshot.delta_changes) as DeltaChanges;
-			state = this.applyDelta(state, delta);
-		}
-
-		return state;
-	}
-
-	/**
-	 * Get the chain of snapshots from the first snapshot to the target.
-	 */
-	private async getSnapshotChain(targetSnapshot: MessageSnapshot): Promise<MessageSnapshot[]> {
-		const chain: MessageSnapshot[] = [];
-		let current: MessageSnapshot | null = targetSnapshot;
-
-		while (current) {
-			chain.unshift(current);
-
-			if (!current.parent_snapshot_id) {
-				break;
-			}
-
-			const parent = snapshotQueries.getById(current.parent_snapshot_id);
-			if (!parent) {
-				throw new Error(`Parent snapshot ${current.parent_snapshot_id} not found`);
-			}
-
-			current = parent;
-		}
-
-		return chain;
-	}
-
-	/**
-	 * Apply a delta to a file state (legacy format - full content in delta as strings).
-	 * Converts string content to Buffer for the new binary-safe interface.
-	 */
-	private applyDelta(state: FileSnapshot, delta: DeltaChanges): FileSnapshot {
-		const newState = { ...state };
-
-		for (const [filepath, content] of Object.entries(delta.added)) {
-			newState[filepath] = Buffer.from(content, 'utf-8');
-		}
-
-		for (const [filepath, content] of Object.entries(delta.modified)) {
-			newState[filepath] = Buffer.from(content, 'utf-8');
-		}
-
-		for (const filepath of delta.deleted) {
-			delete newState[filepath];
-		}
-
-		return newState;
-	}
-
-	/**
-	 * Get diff between current state and a snapshot
-	 */
-	async getDiff(
-		projectPath: string,
-		snapshot: MessageSnapshot
-	): Promise<{
-		added: string[];
-		modified: string[];
-		deleted: string[];
-	}> {
-		try {
-			const snapshotFiles = await this.reconstructSnapshot(snapshot);
-			const currentSnapshot = await this.createFileSnapshot(
-				projectPath,
-				await getSnapshotFiles(projectPath)
-			);
-
-			const added: string[] = [];
-			const modified: string[] = [];
-			const deleted: string[] = [];
-
-			for (const [filepath, content] of Object.entries(currentSnapshot)) {
-				if (!snapshotFiles[filepath]) {
-					added.push(filepath);
-				} else if (!snapshotFiles[filepath].equals(content)) {
-					modified.push(filepath);
-				}
-			}
-
-			for (const filepath of Object.keys(snapshotFiles)) {
-				if (!currentSnapshot[filepath]) {
-					deleted.push(filepath);
-				}
-			}
-
-			return { added, modified, deleted };
-		} catch (error) {
-			debug.error('snapshot', 'Error getting diff:', error);
-			throw new Error(`Failed to get diff: ${error}`);
-		}
-	}
-
-	/**
-	 * Create snapshot of file contents (used for restore comparison and getDiff).
-	 * Reads as Buffer for binary-safe handling.
-	 */
-	private async createFileSnapshot(
-		projectPath: string,
-		files: string[]
-	): Promise<FileSnapshot> {
-		const snapshot: FileSnapshot = {};
-
-		for (const filepath of files) {
-			try {
-				const stats = await fs.stat(filepath);
-				if (stats.size > MAX_FILE_SIZE) continue;
-
-				// Read as Buffer — no encoding, preserves binary files
-				const content = await fs.readFile(filepath);
-				const relativePath = path.relative(projectPath, filepath);
-				const normalizedPath = relativePath.replace(/\\/g, '/');
-				snapshot[normalizedPath] = content;
-			} catch (error) {
-				debug.warn('snapshot', `Could not read file ${filepath}:`, error);
-			}
-		}
-
-		return snapshot;
-	}
-
-	/**
-	 * Clean up old snapshots (older than 30 days)
-	 */
-	async cleanupOldSnapshots(): Promise<void> {
-		// This could be implemented later if needed
+	clearSessionBaseline(sessionId: string): void {
+		this.sessionBaselines.delete(sessionId);
 	}
 }
 

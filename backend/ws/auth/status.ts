@@ -1,0 +1,37 @@
+import { t } from 'elysia';
+import { createRouter } from '$shared/utils/ws-server';
+import { needsSetup, getUserById } from '$backend/lib/auth/auth-service';
+import { ws } from '$backend/lib/utils/ws';
+
+export const statusHandler = createRouter()
+	.http('auth:status', {
+		data: t.Object({}),
+		response: t.Object({
+			needsSetup: t.Boolean(),
+			authenticated: t.Boolean(),
+			user: t.Optional(t.Object({
+				id: t.String(),
+				name: t.String(),
+				role: t.Union([t.Literal('admin'), t.Literal('member')]),
+				color: t.String(),
+				avatar: t.String(),
+				createdAt: t.String()
+			}))
+		})
+	}, async ({ conn }) => {
+		const setup = needsSetup();
+		const authenticated = ws.isAuthenticated(conn);
+
+		let user = undefined;
+		if (authenticated) {
+			const state = ws.getConnectionState(conn);
+			if (state?.userId) {
+				const dbUser = getUserById(state.userId);
+				if (dbUser) {
+					user = dbUser;
+				}
+			}
+		}
+
+		return { needsSetup: setup, authenticated, user };
+	});

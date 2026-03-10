@@ -163,7 +163,8 @@
 		{#if !isMobile}
 			<div class="relative -ml-0.5 mr-2 border-slate-200 dark:border-slate-700">
 				<button
-					bind:this={actionsButtonRef}
+					bind:this={actionsButtonRef}
+
 					type="button"
 					class="flex items-center justify-center w-6 h-6 bg-transparent border-none rounded-md text-slate-400 cursor-pointer transition-all duration-150 hover:bg-violet-500/10 hover:text-slate-700 dark:hover:text-slate-200"
 					onclick={toggleActionsMenu}
@@ -276,7 +277,7 @@
 				>
 					<Icon name="lucide:history" class={isMobile ? 'w-4.5 h-4.5' : 'w-4 h-4'} />
 				</button>
-				{#if sessionState.messages.length > 0}
+					{#if sessionState.messages.length > 0 || sessionState.hasMessageHistory}
 					<button
 						type="button"
 						class="flex items-center justify-center {isMobile ? 'w-9 h-9' : 'w-6 h-6'} bg-transparent border-none rounded-md text-slate-500 cursor-pointer transition-all duration-150 hover:bg-violet-500/10 hover:text-slate-900 dark:hover:text-slate-100"
@@ -527,6 +528,21 @@
 						</button>
 					</div>
 				{/if}
+
+				<!-- Branch switch button -->
+				{#if gitPanelRef?.panelActions?.getIsRepo()}
+					{@const branchInfo = gitPanelRef?.panelActions?.getBranchInfo()}
+					<button
+						type="button"
+						class="flex items-center gap-1 {isMobile ? 'h-9 px-2' : 'h-6 px-1.5'} bg-slate-100 dark:bg-slate-800/60 border-none rounded-md text-slate-700 dark:text-slate-300 cursor-pointer transition-all duration-150 hover:bg-violet-500/10 hover:text-violet-600 dark:hover:text-violet-400"
+						onclick={() => gitPanelRef?.panelActions?.openBranchManager()}
+						title="Switch Branch"
+					>
+						<Icon name="lucide:git-branch" class={isMobile ? 'w-4 h-4' : 'w-3.5 h-3.5'} />
+						<span class="text-xs font-medium truncate max-w-24">{branchInfo?.current || '...'}</span>
+					</button>
+				{/if}
+				
 				{@const hasRemotes = gitPanelRef?.panelActions?.getHasRemotes()}
 				{@const remoteName = gitPanelRef?.panelActions?.getSelectedRemote() || 'origin'}
 				{@const gitRemotes = gitPanelRef?.panelActions?.getRemotes() || []}

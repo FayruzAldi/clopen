@@ -13,6 +13,7 @@
 import { createRouter } from '$shared/utils/ws-server';
 
 // Import all module routers
+import { authRouter } from './auth';
 import { chatRouter } from './chat';
 import { terminalRouter } from './terminal';
 import { previewRouter } from './preview';
@@ -34,6 +35,9 @@ import { engineRouter } from './engine';
 // ============================================
 
 export const wsRouter = createRouter()
+	// Authentication
+	.merge(authRouter)
+
 	// Terminal System
 	.merge(terminalRouter)
 

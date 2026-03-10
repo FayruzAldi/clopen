@@ -8,7 +8,7 @@
 		type PanelId
 	} from '$frontend/lib/stores/ui/workspace.svelte';
 	import { projectState, removeProject } from '$frontend/lib/stores/core/projects.svelte';
-	import { presenceState } from '$frontend/lib/stores/core/presence.svelte';
+	import { presenceState, getProjectStatusColor } from '$frontend/lib/stores/core/presence.svelte';
 	import { openSettingsModal } from '$frontend/lib/stores/ui/settings-modal.svelte';
 	import { addNotification } from '$frontend/lib/stores/ui/notification.svelte';
 	import type { IconName } from '$shared/types/ui/icons';
@@ -65,18 +65,7 @@
 		}
 	}
 
-	// Get status color from presence data (single source of truth from backend)
-	// Shows real-time status for ALL projects, not just the active one.
-	// Uses backend-computed isWaitingInput so background sessions are accurate
-	// even when the frontend hasn't received their chat events.
-	function getStatusColor(projectId: string): string {
-		const status = presenceState.statuses.get(projectId);
-		if (!status?.streams) return 'bg-slate-500/30';
-		const activeStreams = status.streams.filter((s: any) => s.status === 'active');
-		if (activeStreams.length === 0) return 'bg-slate-500/30';
-		const hasWaitingInput = activeStreams.some((s: any) => s.isWaitingInput);
-		return hasWaitingInput ? 'bg-amber-500' : 'bg-emerald-500';
-	}
+	// Status color for project indicator — uses shared helper from presence store
 
 	function openAddProject() {
 		showProjectMenu = false;
@@ -162,7 +151,7 @@
 		aria-expanded={showProjectMenu}
 		aria-haspopup="menu"
 	>
-		<div class="relative shrink-0"><Icon name="lucide:folder-open" class="w-4 h-4" /><span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-100 dark:border-slate-800 {getStatusColor(projectState.currentProject?.id ?? '')}"></span></div>
+		<div class="relative shrink-0"><Icon name="lucide:folder-open" class="w-4 h-4" /><span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-100 dark:border-slate-800 {getProjectStatusColor(projectState.currentProject?.id ?? '')}"></span></div>
 		<span class="flex-1 text-left overflow-hidden text-ellipsis whitespace-nowrap">
 			{projectState.currentProject?.name ?? 'No Project'}
 		</span>
@@ -315,7 +304,7 @@
 							>
 								<Icon name="lucide:folder" class="text-violet-600 dark:text-violet-400 w-4 h-4" />
 								<span
-									class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 {getStatusColor(project.id ?? '')}"
+									class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 {getProjectStatusColor(project.id ?? '')}"
 								></span>
 							</div>
 							<div class="flex-1 min-w-0">

@@ -10,9 +10,9 @@
 	import AvatarBubble from '$frontend/lib/components/common/AvatarBubble.svelte';
 	import Modal from '$frontend/lib/components/common/Modal.svelte';
 	import Dialog from '$frontend/lib/components/common/Dialog.svelte';
-	import { presenceState } from '$frontend/lib/stores/core/presence.svelte';
+	import { presenceState, isSessionWaitingInput } from '$frontend/lib/stores/core/presence.svelte';
+	import { isSessionUnread } from '$frontend/lib/stores/core/app.svelte';
 	import { userStore } from '$frontend/lib/stores/features/user.svelte';
-	import { getSessionProcessState } from '$frontend/lib/stores/core/app.svelte';
 	import { debug } from '$shared/utils/logger';
 
 	interface Props {
@@ -71,7 +71,7 @@
 		}
 
 		try {
-			const messages = await ws.http('messages:list', { session_id: sessionId });
+			const messages = await ws.http('messages:list', { session_id: sessionId, include_all: true });
 
 			const firstUserMessage = messages.find((m: SDKMessage) => m.type === 'user');
 			let title = 'New Conversation';
@@ -474,7 +474,11 @@
 								<Icon name="lucide:message-square" class="text-violet-600 dark:text-violet-400 w-4 h-4" />
 								{#if streaming}
 									<span
-										class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 {getSessionProcessState(session.id).isWaitingInput ? 'bg-amber-500' : 'bg-emerald-500'}"
+										class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 {isSessionWaitingInput(session.id, projectState.currentProject?.id) ? 'bg-amber-500' : 'bg-emerald-500'}"
+									></span>
+								{:else if isSessionUnread(session.id)}
+									<span
+										class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 bg-blue-500"
 									></span>
 								{:else}
 									<span
@@ -512,7 +516,7 @@
 									{/if}
 								</div>
 								{#if streaming}
-								{#if getSessionProcessState(session.id).isWaitingInput}
+								{#if isSessionWaitingInput(session.id, projectState.currentProject?.id)}
 									<p class="text-xs text-amber-500 dark:text-amber-400 mt-0.5 flex items-center gap-1.5">
 										<Icon name="lucide:message-circle-question-mark" class="w-3 h-3 shrink-0" />
 										Waiting for input...

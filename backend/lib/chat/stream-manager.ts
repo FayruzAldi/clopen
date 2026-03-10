@@ -268,6 +268,14 @@ class StreamManager extends EventEmitter {
 		// Track user message ID for stream-end snapshot capture
 		let userMessageId: string | undefined;
 
+		// Initialize session baseline for snapshot system (non-blocking)
+		if (requestData.projectPath && requestData.chatSessionId) {
+			snapshotService.initializeSessionBaseline(
+				requestData.projectPath,
+				requestData.chatSessionId
+			).catch(err => debug.error('snapshot', 'Failed to initialize session baseline:', err));
+		}
+
 		try {
 			const { projectPath, prompt, chatSessionId, engine: engineType = 'claude-code', model, temperature, claudeAccountId } = requestData;
 
@@ -883,7 +891,10 @@ class StreamManager extends EventEmitter {
 			const { projectPath, projectId, chatSessionId } = requestData;
 			if (projectPath && projectId && chatSessionId && userMessageId) {
 				snapshotService.captureSnapshot(projectPath, projectId, chatSessionId, userMessageId)
-					.then(() => debug.log('chat', `Stream-end snapshot captured for message: ${userMessageId}`))
+					.then(() => {
+						debug.log('chat', `Stream-end snapshot captured for message: ${userMessageId}`);
+						this.emit('snapshot:captured', { projectId, chatSessionId });
+					})
 					.catch(err => debug.error('chat', 'Failed to capture stream-end snapshot:', err));
 			}
 		}

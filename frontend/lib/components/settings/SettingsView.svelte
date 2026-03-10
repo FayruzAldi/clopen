@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { authStore } from '$frontend/lib/stores/features/auth.svelte';
 	import PageTemplate from '../common/PageTemplate.svelte';
 
 	// Import modular components
@@ -7,6 +8,10 @@
 	import UserSettings from './user/UserSettings.svelte';
 	import NotificationSettings from './notifications/NotificationSettings.svelte';
 	import GeneralSettings from './general/GeneralSettings.svelte';
+	import UserManagement from './admin/UserManagement.svelte';
+	import InviteManagement from './admin/InviteManagement.svelte';
+
+	const isAdmin = $derived(authStore.isAdmin);
 </script>
 
 <PageTemplate
@@ -30,6 +35,12 @@
 
 			<!-- General Settings -->
 			<GeneralSettings />
+
+			<!-- Admin-only sections -->
+			{#if isAdmin}
+				<UserManagement />
+				<InviteManagement />
+			{/if}
 
 		</div>
 	</div>

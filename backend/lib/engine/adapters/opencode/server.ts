@@ -82,6 +82,14 @@ export function getClient(): OpencodeClient | null {
 }
 
 /**
+ * Get the OpenCode server base URL (e.g. "http://127.0.0.1:4096").
+ * Used for direct HTTP calls to v2 endpoints not available on the v1 client.
+ */
+export function getServerUrl(): string | null {
+	return serverHandle?.url ?? null;
+}
+
+/**
  * Dispose the OpenCode client and stop the server.
  * Called during full server shutdown (disposeAllEngines).
  */

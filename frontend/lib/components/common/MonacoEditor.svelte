@@ -3,6 +3,7 @@
 	import loader from '@monaco-editor/loader';
 	import type { editor } from 'monaco-editor';
 	import { themeStore } from '$frontend/lib/stores/ui/theme.svelte';
+	import { settings } from '$frontend/lib/stores/features/settings.svelte';
 	import { debug } from '$shared/utils/logger';
 
 	interface Props {
@@ -57,9 +58,9 @@
 				indentGuide: '#21262d',
 				indentGuideActive: '#30363d',
 				ruler: '#21262d',
-				scrollbar: '#21262d60',
-				scrollbarHover: '#30363d80',
-				scrollbarActive: '#6e7681'
+				scrollbar: '#6e768140',
+				scrollbarHover: '#6e768180',
+				scrollbarActive: '#8b949e'
 			},
 			tokens: {
 				comment: '6A9955',
@@ -86,9 +87,9 @@
 				indentGuide: '#e3e3e3',
 				indentGuideActive: '#d3d3d3',
 				ruler: '#e3e3e3',
-				scrollbar: '#cccccc60',
-				scrollbarHover: '#999999a0',
-				scrollbarActive: '#666666'
+				scrollbar: '#92929240',
+				scrollbarHover: '#92929280',
+				scrollbarActive: '#555555'
 			},
 			tokens: {
 				comment: '008000',
@@ -375,6 +376,8 @@
 
 	const createEditorOptions: (value: string, lang: string, theme: string) => editor.IStandaloneEditorConstructionOptions = (value, lang, theme) => ({
 		...EDITOR_CONFIG,
+		fontSize: Math.round(settings.fontSize * 0.9),
+		lineHeight: Math.round(settings.fontSize * 0.9 * 1.5),
 		value,
 		language: lang,
 		theme,
@@ -469,6 +472,17 @@
 	$effect(() => {
 		if (monacoEditor) {
 			monacoEditor.updateOptions({ readOnly: readonly });
+		}
+	});
+
+	// Update font size when setting changes
+	$effect(() => {
+		const size = settings.fontSize;
+		if (monacoEditor && isInitialized) {
+			monacoEditor.updateOptions({
+				fontSize: Math.round(size * 0.9),
+				lineHeight: Math.round(size * 0.9 * 1.5) 
+			});
 		}
 	});
 

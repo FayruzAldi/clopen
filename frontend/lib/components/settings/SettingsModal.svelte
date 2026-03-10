@@ -9,6 +9,7 @@
 		settingsSections,
 		type SettingsSection
 	} from '$frontend/lib/stores/ui/settings-modal.svelte';
+	import { authStore } from '$frontend/lib/stores/features/auth.svelte';
 
 	// Import settings components
 	import ModelSettings from './model/ModelSettings.svelte';
@@ -17,7 +18,8 @@
 	import UserSettings from './user/UserSettings.svelte';
 	import NotificationSettings from './notifications/NotificationSettings.svelte';
 	import GeneralSettings from './general/GeneralSettings.svelte';
-	import pkg from '../../../../package.json';
+	import UserManagement from './admin/UserManagement.svelte';
+	import InviteManagement from './admin/InviteManagement.svelte';
 
 	// Responsive state
 	let isMobileMenuOpen = $state(false);
@@ -26,6 +28,12 @@
 	const isMobile = $derived(windowWidth < 768);
 	const isOpen = $derived(settingsModalState.isOpen);
 	const activeSection = $derived(settingsModalState.activeSection);
+	const isAdmin = $derived(authStore.isAdmin);
+
+	// Filter sections: hide admin-only tabs for non-admins
+	const visibleSections = $derived(
+		settingsSections.filter(s => !s.adminOnly || isAdmin)
+	);
 
 	// Handle section change
 	function handleSectionChange(section: SettingsSection) {
@@ -83,7 +91,7 @@
 			role="dialog"
 			aria-labelledby="settings-title"
 			tabindex="-1"
-			class="flex flex-col w-full max-w-225 h-[85vh] max-h-175 bg-slate-50 dark:bg-slate-950 border border-violet-500/20 rounded-2xl overflow-hidden shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] max-md:max-w-full max-md:h-screen max-md:max-h-screen max-md:rounded-none"
+			class="flex flex-col w-full max-w-225 h-[85dvh] max-h-175 bg-slate-50 dark:bg-slate-950 border border-violet-500/20 rounded-2xl overflow-hidden shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] max-md:max-w-full max-md:h-dvh max-md:max-h-dvh max-md:rounded-none"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
 			in:scale={{ duration: 250, easing: cubicOut, start: 0.95 }}
@@ -100,7 +108,7 @@
 						onclick={() => (isMobileMenuOpen = !isMobileMenuOpen)}
 						aria-label="Toggle menu"
 					>
-						<Icon name={isMobileMenuOpen ? 'lucide:x' : 'lucide:menu'} class="w-5 h-5" />
+						<Icon name={isMobileMenuOpen ? 'lucide:arrow-left' : 'lucide:menu'} class="w-5 h-5" />
 					</button>
 					<h2
 						id="settings-title"
@@ -150,7 +158,7 @@
 					{/if}
 
 					<nav class="flex-1 overflow-y-auto p-3">
-						{#each settingsSections as section (section.id)}
+						{#each visibleSections as section (section.id)}
 							<button
 								type="button"
 								class="flex items-start gap-3 w-full py-3 px-3.5 bg-transparent border-none rounded-lg text-slate-500 text-sm text-left cursor-pointer transition-all duration-150 mb-1
@@ -179,13 +187,7 @@
 						{/each}
 					</nav>
 
-					<footer class="p-4 border-t border-slate-200 dark:border-slate-800">
-						<div class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-500">
-							<Icon name="lucide:info" class="w-4 h-4" />
-							<span>Clopen v{pkg.version}</span>
-						</div>
-					</footer>
-				</aside>
+					</aside>
 
 				<!-- Mobile Menu Overlay -->
 				{#if isMobile && isMobileMenuOpen}
@@ -225,6 +227,13 @@
 						{:else if activeSection === 'general'}
 							<div in:fly={{ x: 20, duration: 200 }}>
 								<GeneralSettings />
+							</div>
+						{:else if activeSection === 'admin' && isAdmin}
+							<div in:fly={{ x: 20, duration: 200 }}>
+								<UserManagement />
+								<div class="mt-6">
+									<InviteManagement />
+								</div>
 							</div>
 						{/if}
 					</div>

@@ -459,18 +459,18 @@ const defaultPanels: Record<PanelId, PanelConfig> = {
 		minimized: false,
 		order: 0
 	},
-	preview: {
-		id: 'preview',
-		title: 'Preview',
-		icon: 'lucide:globe',
-		visible: true,
-		minimized: false,
-		order: 1
-	},
 	files: {
 		id: 'files',
 		title: 'Files',
 		icon: 'lucide:folder',
+		visible: true,
+		minimized: false,
+		order: 1
+	},
+	git: {
+		id: 'git',
+		title: 'Source Control',
+		icon: 'lucide:git-branch',
 		visible: true,
 		minimized: false,
 		order: 2
@@ -483,10 +483,10 @@ const defaultPanels: Record<PanelId, PanelConfig> = {
 		minimized: false,
 		order: 3
 	},
-	git: {
-		id: 'git',
-		title: 'Source Control',
-		icon: 'lucide:git-branch',
+	preview: {
+		id: 'preview',
+		title: 'Preview',
+		icon: 'lucide:globe',
 		visible: true,
 		minimized: false,
 		order: 4
@@ -496,13 +496,13 @@ const defaultPanels: Record<PanelId, PanelConfig> = {
 export const PANEL_OPTIONS: { id: PanelId; title: string; icon: IconName }[] = [
 	{ id: 'chat', title: 'AI Assistant', icon: 'lucide:bot' },
 	{ id: 'files', title: 'Files', icon: 'lucide:folder' },
-	{ id: 'preview', title: 'Preview', icon: 'lucide:globe' },
+	{ id: 'git', title: 'Source Control', icon: 'lucide:git-branch' },
 	{ id: 'terminal', title: 'Terminal', icon: 'lucide:terminal' },
-	{ id: 'git', title: 'Source Control', icon: 'lucide:git-branch' }
+	{ id: 'preview', title: 'Preview', icon: 'lucide:globe' }
 ];
 
-// Default: Main + Stack layout
-const defaultPreset = builtInPresets.find((p) => p.id === 'main-stack')!;
+// Default: Full Grid layout (5 panels)
+const defaultPreset = builtInPresets.find((p) => p.id === 'full-grid')!;
 
 // ============================================
 // CORE STATE
@@ -511,9 +511,9 @@ const defaultPreset = builtInPresets.find((p) => p.id === 'main-stack')!;
 export const workspaceState = $state<WorkspaceState>({
 	panels: { ...defaultPanels },
 	layout: defaultPreset.layout,
-	activePresetId: 'main-stack',
+	activePresetId: 'full-grid',
 	navigatorCollapsed: false,
-	navigatorWidth: 220,
+	navigatorWidth: 200,
 	activeMobilePanel: 'chat'
 });
 
@@ -720,7 +720,7 @@ export function applyLayoutPreset(preset: LayoutPreset): void {
 
 export function resetToDefault(): void {
 	applyLayoutPreset(defaultPreset);
-	debug.log('workspace', 'Reset to default layout (Main + Stack)');
+	debug.log('workspace', 'Reset to default layout (Full Grid)');
 }
 
 // ============================================
@@ -732,8 +732,9 @@ export function toggleNavigator(): void {
 	saveWorkspaceState();
 }
 
-export function setNavigatorWidth(width: number): void {
-	workspaceState.navigatorWidth = Math.max(200, Math.min(400, width));
+export function setNavigatorWidth(width: number, fontSize: number = 13): void {
+	const scale = fontSize / 13;
+	workspaceState.navigatorWidth = Math.max(Math.round(180 * scale), Math.min(Math.round(400 * scale), width));
 	saveWorkspaceState();
 }
 

@@ -407,7 +407,7 @@
 			class="
 			relative z-10 flex items-end gap-3 lg:gap-4 overflow-hidden bg-white dark:bg-slate-900
 			border border-slate-200 dark:border-slate-700 rounded-xl transition-all duration-200
-			focus-within:ring-2 focus-within:ring-violet-500 {fileHandling.isDragging && 'ring-2 ring-violet-500'}"
+			focus-within:ring-1 focus-within:ring-violet-500 {fileHandling.isDragging && 'ring-1 ring-violet-500'}"
 			role="region"
 			aria-label="Message input with file drop zone"
 			ondragover={fileHandling.handleDragOver}
@@ -421,14 +421,13 @@
 				<!-- Edit Mode Indicator -->
 				<EditModeIndicator onCancel={handleCancelEdit} />
 
-				<div class="relative">
+				<div class="flex items-end">
 					<textarea
 						bind:this={textareaElement}
 						bind:value={messageText}
 						placeholder={chatPlaceholder}
-						class="flex w-full p-4 pr-24 border-0 bg-transparent resize-none focus:outline-none text-slate-900 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-400 text-base leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed"
+						class="flex-1 w-full px-4 pt-2 pb-4 border-0 bg-transparent resize-none focus:outline-none text-slate-900 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-400 text-base leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed"
 						rows="1"
-						style="max-height: 22.5rem; overflow-y: hidden;"
 						disabled={isInputDisabled}
 						oninput={handleTextareaInput}
 						onkeydown={handleKeyDown}

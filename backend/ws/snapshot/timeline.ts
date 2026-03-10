@@ -15,7 +15,8 @@ import {
 	getCheckpointPathToRoot,
 	findCheckpointForHead,
 	isDescendant,
-	getCheckpointFileStats
+	getCheckpointFileStats,
+	INITIAL_NODE_ID
 } from '../../lib/snapshot/helpers';
 import type { CheckpointNode, TimelineResponse } from '../../lib/snapshot/helpers';
 import type { SDKMessage } from '$shared/types/messaging';
@@ -36,11 +37,8 @@ export const timelineHandler = createRouter()
 
 		// 1. Get current HEAD
 		const currentHead = sessionQueries.getHead(sessionId);
-		debug.log('snapshot', `Current HEAD: ${currentHead || 'null'}`);
-
-		if (!currentHead) {
-			return { nodes: [], currentHeadId: null };
-		}
+		const isAtInitialState = !currentHead;
+		debug.log('snapshot', `Current HEAD: ${currentHead || 'null (initial state)'}`);
 
 		// 2. Get all messages
 		const allMessages = messageQueries.getAllBySessionId(sessionId);
@@ -61,8 +59,10 @@ export const timelineHandler = createRouter()
 		const checkpointIdSet = new Set(checkpoints.map(c => c.id));
 
 		// 4. Find which checkpoint HEAD belongs to
-		const activeCheckpointId = findCheckpointForHead(currentHead, allMessages, checkpointIdSet);
-		debug.log('snapshot', `Active checkpoint: ${activeCheckpointId}`);
+		const activeCheckpointId = isAtInitialState
+			? null
+			: findCheckpointForHead(currentHead, allMessages, checkpointIdSet);
+		debug.log('snapshot', `Active checkpoint: ${activeCheckpointId || '(initial)'}`);
 
 		// 5. Build active path (from root to active checkpoint)
 		const activePathIds = new Set<string>();
@@ -76,22 +76,47 @@ export const timelineHandler = createRouter()
 		// 6. Get active children map from database
 		const activeChildrenMap = checkpointQueries.getAllActiveChildren(sessionId);
 
-		// 7. Sort checkpoints by timestamp for file stats calculation
-		const sortedCheckpoints = [...checkpoints].sort(
-			(a, b) => a.timestamp.localeCompare(b.timestamp)
-		);
+		// 7. Build response nodes
+		const nodes: CheckpointNode[] = [];
 
-		// Build next-checkpoint timestamp map for stats
-		const nextTimestampMap = new Map<string, string>();
-		for (let i = 0; i < sortedCheckpoints.length; i++) {
-			const next = sortedCheckpoints[i + 1];
-			if (next) {
-				nextTimestampMap.set(sortedCheckpoints[i].id, next.timestamp);
-			}
+		// Find root checkpoints (those with no parent)
+		const rootCheckpointIds = checkpoints
+			.filter(cp => !parentMap.has(cp.id))
+			.map(cp => cp.id);
+
+		// Get session started_at for the initial node timestamp
+		const session = sessionQueries.getById(sessionId);
+		const sessionStartedAt = session?.started_at || new Date().toISOString();
+
+		// Add the "Initial State" node at the beginning
+		// Its activeChildId points to the first root checkpoint on the active path,
+		// or the first root checkpoint if we're at initial state
+		let initialActiveChildId: string | null = null;
+		if (isAtInitialState) {
+			// At initial state: the first root checkpoint (by timestamp) is the active child
+			initialActiveChildId = rootCheckpointIds[0] || null;
+		} else {
+			// Find root checkpoint on active path
+			initialActiveChildId = rootCheckpointIds.find(id => activePathIds.has(id)) || rootCheckpointIds[0] || null;
 		}
 
-		// 8. Build response nodes
-		const nodes: CheckpointNode[] = [];
+		nodes.push({
+			id: INITIAL_NODE_ID,
+			messageId: INITIAL_NODE_ID,
+			parentId: null,
+			activeChildId: initialActiveChildId,
+			timestamp: sessionStartedAt,
+			messageText: 'Session Start',
+			isOnActivePath: isAtInitialState || activePathIds.size > 0,
+			isOrphaned: false,
+			isCurrent: isAtInitialState,
+			hasSnapshot: false,
+			isInitial: true,
+			senderName: null,
+			filesChanged: 0,
+			insertions: 0,
+			deletions: 0
+		});
 
 		for (const cp of checkpoints) {
 			const sdk = JSON.parse(cp.sdk_message) as SDKMessage;
@@ -107,16 +132,16 @@ export const timelineHandler = createRouter()
 				isOrphaned = isDescendant(cp.id, activeCheckpointId, childrenMap);
 			}
 
-			// File stats
-			const nextTimestamp = nextTimestampMap.get(cp.id);
-			const stats = getCheckpointFileStats(cp, allMessages, nextTimestamp);
+			// File stats from checkpoint's own snapshot
+			const stats = getCheckpointFileStats(cp);
 
 			const snapshot = snapshotQueries.getByMessageId(cp.id);
 
 			nodes.push({
 				id: cp.id,
 				messageId: cp.id,
-				parentId: parentCpId,
+				// Root checkpoints have initial node as parent
+				parentId: parentCpId || INITIAL_NODE_ID,
 				activeChildId,
 				timestamp: cp.timestamp,
 				messageText,
@@ -131,11 +156,13 @@ export const timelineHandler = createRouter()
 			});
 		}
 
-		debug.log('snapshot', `Timeline nodes: ${nodes.length}`);
-		debug.log('snapshot', `Active path: ${activePathIds.size} nodes`);
+		const currentHeadId = isAtInitialState ? INITIAL_NODE_ID : activeCheckpointId;
+
+		debug.log('snapshot', `Timeline nodes: ${nodes.length} (including initial)`);
+		debug.log('snapshot', `Active path: ${activePathIds.size} nodes, current: ${currentHeadId}`);
 
 		return {
 			nodes,
-			currentHeadId: activeCheckpointId
+			currentHeadId
 		};
 	});

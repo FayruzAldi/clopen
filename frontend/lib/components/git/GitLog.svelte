@@ -14,6 +14,25 @@
 	const { commits, isLoading, hasMore, onLoadMore, onViewCommit }: Props = $props();
 
 	let selectedHash = $state('');
+	let sentinelEl = $state<HTMLDivElement | null>(null);
+
+	// Infinite scroll: auto load more when sentinel is visible
+	$effect(() => {
+		const el = sentinelEl;
+		if (!el || !hasMore) return;
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries[0]?.isIntersecting && hasMore && !isLoading) {
+					onLoadMore();
+				}
+			},
+			{ rootMargin: '100px' }
+		);
+
+		observer.observe(el);
+		return () => observer.disconnect();
+	});
 
 	// ========================
 	// Git Graph Computation
@@ -25,14 +44,13 @@
 		lanes: Array<{ col: number; color: string }>;
 		mergeFrom: Array<{ col: number; color: string }>;
 		branchTo: Array<{ col: number; color: string }>;
-		/** Which lane columns existed in the previous row (for drawing top half of lines) */
+		branchToCols: Set<number>;
 		prevLaneCols: Set<number>;
-		/** Which lane columns will exist in the next row (for drawing bottom half of lines) */
 		nextLaneCols: Set<number>;
-		/** Whether this node's lane existed in the previous row */
 		nodeHasTop: boolean;
-		/** Whether this node's lane continues to the next row */
 		nodeHasBottom: boolean;
+		/** Max column index used in this row (for per-row graph width) */
+		maxCol: number;
 	}
 
 	const LANE_COLORS = [
@@ -41,10 +59,6 @@
 	];
 
 	const graphRows = $derived(computeGraph(commits));
-	const maxCols = $derived(graphRows.reduce((max, row) => {
-		const cols = [row.col, ...row.lanes.map(l => l.col), ...row.mergeFrom.map(m => m.col), ...row.branchTo.map(b => b.col)];
-		return Math.max(max, ...cols);
-	}, 0) + 1);
 
 	function computeGraph(commits: GitCommit[]): GraphRow[] {
 		if (commits.length === 0) return [];
@@ -53,6 +67,7 @@
 		const laneColorMap = new Map<number, string>();
 		let colorIdx = 0;
 		const rows: GraphRow[] = [];
+		const processedSet = new Set<string>();
 
 		function getColor(col: number): string {
 			if (!laneColorMap.has(col)) {
@@ -70,7 +85,6 @@
 			return s;
 		}
 
-		// Track previous row's active lane columns
 		let prevActiveCols = new Set<number>();
 
 		for (const commit of commits) {
@@ -81,11 +95,13 @@
 
 			let col: number;
 			const mergeFrom: Array<{ col: number; color: string }> = [];
+			const mergeFromCols = new Set<number>();
 
 			if (myLanes.length > 0) {
 				col = myLanes[0];
 				for (let i = 1; i < myLanes.length; i++) {
 					mergeFrom.push({ col: myLanes[i], color: getColor(myLanes[i]) });
+					mergeFromCols.add(myLanes[i]);
 					lanes[myLanes[i]] = null;
 				}
 			} else {
@@ -97,17 +113,26 @@
 			getColor(col);
 			const nodeHasTop = prevActiveCols.has(col);
 
-			// Snapshot current active lanes (before parent assignment)
 			const currentPrevCols = new Set(prevActiveCols);
 
 			const branchTo: Array<{ col: number; color: string }> = [];
+			const branchToCols = new Set<number>();
 			if (commit.parents.length > 0) {
-				lanes[col] = commit.parents[0];
+				// First parent: skip if already processed (non-topo edge case)
+				if (processedSet.has(commit.parents[0])) {
+					lanes[col] = null;
+				} else {
+					lanes[col] = commit.parents[0];
+				}
 
 				for (let p = 1; p < commit.parents.length; p++) {
+					// Skip parents that were already processed
+					if (processedSet.has(commit.parents[p])) continue;
+
 					const existingIdx = lanes.indexOf(commit.parents[p]);
 					if (existingIdx >= 0 && existingIdx !== col) {
 						branchTo.push({ col: existingIdx, color: getColor(existingIdx) });
+						branchToCols.add(existingIdx);
 					} else {
 						let newCol = -1;
 						for (let i = 0; i < lanes.length; i++) {
@@ -119,6 +144,7 @@
 						}
 						lanes[newCol] = commit.parents[p];
 						branchTo.push({ col: newCol, color: getColor(newCol) });
+						branchToCols.add(newCol);
 					}
 				}
 			} else {
@@ -134,18 +160,27 @@
 
 			const nextActiveCols = getActiveCols();
 
+			// Calculate max column used in this row
+			let rowMaxCol = col;
+			for (const lane of activeLanes) rowMaxCol = Math.max(rowMaxCol, lane.col);
+			for (const m of mergeFrom) rowMaxCol = Math.max(rowMaxCol, m.col);
+			for (const b of branchTo) rowMaxCol = Math.max(rowMaxCol, b.col);
+
 			rows.push({
 				col,
 				nodeColor: getColor(col),
 				lanes: activeLanes,
 				mergeFrom,
 				branchTo,
+				branchToCols,
 				prevLaneCols: currentPrevCols,
 				nextLaneCols: nextActiveCols,
 				nodeHasTop,
-				nodeHasBottom: nextActiveCols.has(col)
+				nodeHasBottom: nextActiveCols.has(col),
+				maxCol: rowMaxCol
 			});
 
+			processedSet.add(commit.hash);
 			prevActiveCols = nextActiveCols;
 
 			while (lanes.length > 0 && lanes[lanes.length - 1] === null) {
@@ -160,9 +195,18 @@
 	// Helpers
 	// ========================
 
-	const LANE_WIDTH = 16;
-	const ROW_HEIGHT = 40;
-	const NODE_R = 4;
+	const LANE_WIDTH = 10;
+	const ROW_HEIGHT = 48;
+	const NODE_R = 3;
+	const GRAPH_PAD = 3;
+	const LINE_W = '1.5';
+	const MAX_VISIBLE_REFS = 3;
+	const MAX_REF_LENGTH = 22;
+
+	function truncateRef(ref: string): string {
+		if (ref.length <= MAX_REF_LENGTH) return ref;
+		return ref.substring(0, MAX_REF_LENGTH - 1) + '\u2026';
+	}
 
 	function formatDate(dateStr: string): string {
 		const date = new Date(dateStr);
@@ -194,7 +238,7 @@
 	}
 </script>
 
-<div class="h-full flex flex-col">
+<div class="flex-1 min-h-0 flex flex-col">
 	{#if isLoading && commits.length === 0}
 		<div class="flex-1 flex items-center justify-center">
 			<div class="w-5 h-5 border-2 border-slate-200 dark:border-slate-700 border-t-violet-600 rounded-full animate-spin"></div>
@@ -205,15 +249,16 @@
 			<span>No commits yet</span>
 		</div>
 	{:else}
-		<div class="flex-1 overflow-y-auto">
+		<div class="flex-1 overflow-y-auto overflow-x-hidden pt-2">
 			{#each commits as commit, idx (commit.hash)}
 				{@const graph = graphRows[idx]}
-				{@const graphWidth = Math.max(maxCols, 1) * LANE_WIDTH + 8}
+				{@const graphWidth = (graph ? graph.maxCol + 1 : 1) * LANE_WIDTH + GRAPH_PAD * 2}
 				<div
 					class="group flex items-stretch w-full text-left cursor-pointer transition-colors
 						{selectedHash === commit.hash
 							? 'bg-violet-50 dark:bg-violet-900/10'
 							: 'hover:bg-slate-50 dark:hover:bg-slate-800/40'}"
+					style="height: {ROW_HEIGHT}px;"
 					role="button"
 					tabindex="0"
 					onclick={() => handleViewCommit(commit.hash)}
@@ -221,139 +266,134 @@
 				>
 					<!-- Git Graph Column -->
 					{#if graph}
-						<div class="shrink-0 relative" style="width: {graphWidth}px; min-height: {ROW_HEIGHT}px;">
-							<svg class="absolute inset-0 w-full h-full" style="overflow: visible;">
-								<!-- Vertical lines for active lanes (pass-through) -->
+						<div class="shrink-0 relative" style="width: {graphWidth}px;">
+							<svg class="absolute inset-0 w-full h-full">
+								<!-- Vertical lines for pass-through lanes (skip node col and branchTo cols) -->
 								{#each graph.lanes as lane}
-									{@const lx = lane.col * LANE_WIDTH + LANE_WIDTH / 2 + 4}
-									{@const hasTop = graph.prevLaneCols.has(lane.col)}
-									{@const hasBottom = true}
-									<line
-										x1={lx} y1={hasTop ? 0 : ROW_HEIGHT / 2}
-										x2={lx} y2={hasBottom ? ROW_HEIGHT : ROW_HEIGHT / 2}
-										stroke={lane.color}
-										stroke-width="2"
-										opacity="0.4"
-									/>
+									{#if lane.col !== graph.col && !graph.branchToCols.has(lane.col)}
+										{@const lx = lane.col * LANE_WIDTH + LANE_WIDTH / 2 + GRAPH_PAD}
+										{@const hasTop = graph.prevLaneCols.has(lane.col)}
+										<line
+											x1={lx} y1={hasTop ? 0 : ROW_HEIGHT / 2}
+											x2={lx} y2={ROW_HEIGHT}
+											stroke={lane.color}
+											stroke-width={LINE_W}
+										/>
+									{/if}
 								{/each}
 
-								<!-- Merge lines (from other lanes into this commit's node) -->
+								<!-- Top-half lines for branchTo cols that existed in previous row (skip if also mergeFrom) -->
+								{#each graph.branchTo as branch}
+									{#if graph.prevLaneCols.has(branch.col) && !graph.mergeFrom.some(m => m.col === branch.col)}
+										{@const bx = branch.col * LANE_WIDTH + LANE_WIDTH / 2 + GRAPH_PAD}
+										<line
+											x1={bx} y1={0}
+											x2={bx} y2={ROW_HEIGHT / 2}
+											stroke={branch.color}
+											stroke-width={LINE_W}
+										/>
+									{/if}
+								{/each}
+
+								<!-- Merge curves (from other lanes into this node) -->
 								{#each graph.mergeFrom as merge}
-									{@const mx = merge.col * LANE_WIDTH + LANE_WIDTH / 2 + 4}
-									{@const nx = graph.col * LANE_WIDTH + LANE_WIDTH / 2 + 4}
+									{@const mx = merge.col * LANE_WIDTH + LANE_WIDTH / 2 + GRAPH_PAD}
+									{@const nx = graph.col * LANE_WIDTH + LANE_WIDTH / 2 + GRAPH_PAD}
 									<path
 										d="M {mx} 0 C {mx} {ROW_HEIGHT * 0.4}, {nx} {ROW_HEIGHT * 0.3}, {nx} {ROW_HEIGHT / 2}"
 										fill="none"
 										stroke={merge.color}
-										stroke-width="2"
-										opacity="0.5"
+										stroke-width={LINE_W}
 									/>
 								{/each}
 
-								<!-- Branch lines (from this node to new lanes) -->
+								<!-- Branch curves (from this node to new lanes) -->
 								{#each graph.branchTo as branch}
-									{@const bx = branch.col * LANE_WIDTH + LANE_WIDTH / 2 + 4}
-									{@const nx = graph.col * LANE_WIDTH + LANE_WIDTH / 2 + 4}
+									{@const bx = branch.col * LANE_WIDTH + LANE_WIDTH / 2 + GRAPH_PAD}
+									{@const nx = graph.col * LANE_WIDTH + LANE_WIDTH / 2 + GRAPH_PAD}
 									<path
 										d="M {nx} {ROW_HEIGHT / 2} C {nx} {ROW_HEIGHT * 0.7}, {bx} {ROW_HEIGHT * 0.6}, {bx} {ROW_HEIGHT}"
 										fill="none"
 										stroke={branch.color}
-										stroke-width="2"
-										opacity="0.5"
+										stroke-width={LINE_W}
 									/>
 								{/each}
 
 								<!-- Main vertical line through this node's lane -->
 								<line
-									x1={graph.col * LANE_WIDTH + LANE_WIDTH / 2 + 4} y1={graph.nodeHasTop ? 0 : ROW_HEIGHT / 2}
-									x2={graph.col * LANE_WIDTH + LANE_WIDTH / 2 + 4} y2={graph.nodeHasBottom ? ROW_HEIGHT : ROW_HEIGHT / 2}
+									x1={graph.col * LANE_WIDTH + LANE_WIDTH / 2 + GRAPH_PAD} y1={graph.nodeHasTop ? 0 : ROW_HEIGHT / 2}
+									x2={graph.col * LANE_WIDTH + LANE_WIDTH / 2 + GRAPH_PAD} y2={graph.nodeHasBottom ? ROW_HEIGHT : ROW_HEIGHT / 2}
 									stroke={graph.nodeColor}
-									stroke-width="2"
-									opacity="0.4"
+									stroke-width={LINE_W}
 								/>
 
 								<!-- Node circle -->
 								<circle
-									cx={graph.col * LANE_WIDTH + LANE_WIDTH / 2 + 4}
+									cx={graph.col * LANE_WIDTH + LANE_WIDTH / 2 + GRAPH_PAD}
 									cy={ROW_HEIGHT / 2}
-									r={commit.parents.length > 1 ? NODE_R + 1 : NODE_R}
+									r={NODE_R}
 									fill={graph.nodeColor}
 									stroke="white"
-									stroke-width="2"
+									stroke-width="1.5"
 								/>
-								{#if commit.parents.length > 1}
-									<circle
-										cx={graph.col * LANE_WIDTH + LANE_WIDTH / 2 + 4}
-										cy={ROW_HEIGHT / 2}
-										r={NODE_R + 3}
-										fill="none"
-										stroke={graph.nodeColor}
-										stroke-width="1.5"
-										opacity="0.5"
-									/>
-								{/if}
 							</svg>
 						</div>
 					{/if}
 
-					<!-- Commit info -->
-					<div class="flex-1 min-w-0 flex items-center gap-2 px-2 py-1.5">
-						<div class="flex-1 min-w-0">
-							<p class="text-sm text-slate-900 dark:text-slate-100 leading-snug truncate">
+					<!-- Commit info (3-line layout) -->
+					<div class="flex-1 min-w-0 px-1.5 py-0.5 flex flex-col justify-center overflow-hidden">
+						<!-- Line 1: Message + Date -->
+						<div class="flex items-center gap-2">
+							<p class="flex-1 min-w-0 text-sm text-slate-900 dark:text-slate-100 leading-tight truncate" title={commit.message}>
 								{commit.message}
 							</p>
-							<div class="flex items-center gap-2 mt-0.5">
-								<span class="text-xs font-mono text-violet-600 dark:text-violet-400">
-									{commit.hashShort}
-								</span>
-								<span class="text-xs text-slate-500 truncate">{commit.author}</span>
-								{#if commit.refs && commit.refs.length > 0}
-									{#each commit.refs as ref}
-										<span class="text-3xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 truncate shrink-0">
-											{ref}
-										</span>
-									{/each}
+							<span class="text-3xs text-slate-400 shrink-0">{formatDate(commit.date)}</span>
+						</div>
+
+						<!-- Line 2: Hash + Author -->
+						<div class="flex items-center gap-1.5 mt-px">
+							<button
+								type="button"
+								class="text-xs font-mono text-violet-600 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-300 bg-transparent border-none cursor-pointer p-0 shrink-0 transition-colors"
+								onclick={(e) => copyCommitHash(commit.hash, e)}
+								title="Copy commit hash"
+							>
+								{commit.hashShort}
+							</button>
+							<span class="text-xs text-slate-500 truncate">{commit.author}</span>
+						</div>
+
+						<!-- Line 3: Refs -->
+						{#if commit.refs && commit.refs.length > 0}
+							<div class="flex items-center gap-1 mt-px overflow-hidden">
+								{#each commit.refs.slice(0, MAX_VISIBLE_REFS) as ref}
+									<span
+										class="text-3xs px-1 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0 truncate max-w-28"
+										title={ref}
+									>
+										{truncateRef(ref)}
+									</span>
+								{/each}
+								{#if commit.refs.length > MAX_VISIBLE_REFS}
+									<span
+										class="text-3xs px-1 py-px rounded bg-slate-500/10 text-slate-500 shrink-0 cursor-default"
+										title={commit.refs.slice(MAX_VISIBLE_REFS).join(', ')}
+									>
+										+{commit.refs.length - MAX_VISIBLE_REFS}
+									</span>
 								{/if}
 							</div>
-						</div>
-
-						<!-- Actions -->
-						<div class="items-center gap-0.5 shrink-0 hidden group-hover:flex">
-							<button
-								type="button"
-								class="flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:bg-violet-500/10 hover:text-violet-600 transition-colors bg-transparent border-none cursor-pointer"
-								onclick={(e) => copyCommitHash(commit.hash, e)}
-								title="Copy full commit hash"
-							>
-								<Icon name="lucide:copy" class="w-3.5 h-3.5" />
-							</button>
-							<button
-								type="button"
-								class="flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:bg-violet-500/10 hover:text-violet-600 transition-colors bg-transparent border-none cursor-pointer"
-								onclick={(e) => { e.stopPropagation(); copyCommitHash(commit.hashShort, e); }}
-								title="Copy short hash"
-							>
-								<Icon name="lucide:hash" class="w-3.5 h-3.5" />
-							</button>
-						</div>
-
-						<!-- Date -->
-						<span class="text-xs text-slate-400 shrink-0">{formatDate(commit.date)}</span>
+						{/if}
 					</div>
 				</div>
 			{/each}
 
-			<!-- Load more -->
+			<!-- Infinite scroll sentinel -->
 			{#if hasMore}
-				<div class="flex justify-center py-3">
-					<button
-						type="button"
-						class="px-4 py-1.5 text-xs font-medium text-violet-600 bg-violet-500/10 rounded-md hover:bg-violet-500/20 transition-colors cursor-pointer border-none"
-						onclick={onLoadMore}
-						disabled={isLoading}
-					>
-						{isLoading ? 'Loading...' : 'Load More'}
-					</button>
+				<div bind:this={sentinelEl} class="flex justify-center py-3">
+					{#if isLoading}
+						<div class="w-4 h-4 border-2 border-slate-200 dark:border-slate-700 border-t-violet-600 rounded-full animate-spin"></div>
+					{/if}
 				</div>
 			{/if}
 		</div>

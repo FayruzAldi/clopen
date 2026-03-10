@@ -30,6 +30,8 @@ interface CLIOptions {
 	host?: string;
 	help?: boolean;
 	version?: boolean;
+	update?: boolean;
+	resetPat?: boolean;
 }
 
 // Get version from package.json
@@ -90,6 +92,11 @@ Clopen - Modern web UI for Claude Code
 
 USAGE:
   clopen [OPTIONS]
+  clopen update
+
+COMMANDS:
+  update                  Update clopen to the latest version
+  reset-pat               Regenerate admin Personal Access Token
 
 OPTIONS:
   -p, --port <number>     Port to run the server on (default: ${DEFAULT_PORT})
@@ -101,6 +108,8 @@ EXAMPLES:
   clopen                  # Start with default settings (port ${DEFAULT_PORT})
   clopen --port 9150      # Start on port 9150
   clopen --host 0.0.0.0   # Bind to all network interfaces
+  clopen update           # Update to the latest version
+  clopen reset-pat        # Regenerate admin login token
   clopen --version        # Show version
 
 For more information, visit: https://github.com/myrialabs/clopen
@@ -157,6 +166,14 @@ function parseArguments(): CLIOptions {
 				break;
 			}
 
+			case 'update':
+				options.update = true;
+				break;
+
+			case 'reset-pat':
+				options.resetPat = true;
+				break;
+
 			default:
 				console.error(`❌ Error: Unknown option "${arg}"`);
 				console.log('Run "clopen --help" for usage information');
@@ -165,6 +182,104 @@ function parseArguments(): CLIOptions {
 	}
 
 	return options;
+}
+
+/** Simple semver comparison: returns true if latest > current */
+function isNewerVersion(current: string, latest: string): boolean {
+	const currentParts = current.split('.').map(Number);
+	const latestParts = latest.split('.').map(Number);
+
+	for (let i = 0; i < 3; i++) {
+		const c = currentParts[i] || 0;
+		const l = latestParts[i] || 0;
+		if (l > c) return true;
+		if (l < c) return false;
+	}
+	return false;
+}
+
+async function runUpdate() {
+	const currentVersion = getVersion();
+	console.log(`\x1b[36mClopen\x1b[0m v${currentVersion}\n`);
+
+	// Check for latest version
+	updateLoading('Checking for updates...');
+
+	let latestVersion: string;
+	try {
+		const response = await fetch('https://registry.npmjs.org/@myrialabs/clopen/latest');
+		if (!response.ok) {
+			stopLoading();
+			console.error(`❌ Failed to check for updates (HTTP ${response.status})`);
+			process.exit(1);
+		}
+		const data = await response.json() as { version: string };
+		latestVersion = data.version;
+	} catch (err) {
+		stopLoading();
+		console.error('❌ Failed to reach npm registry:', err instanceof Error ? err.message : err);
+		process.exit(1);
+	}
+
+	stopLoading();
+
+	if (!isNewerVersion(currentVersion, latestVersion)) {
+		console.log(`✓ Already up to date (v${currentVersion})`);
+		process.exit(0);
+	}
+
+	console.log(`  New version available: v${currentVersion} → \x1b[32mv${latestVersion}\x1b[0m\n`);
+
+	// Run update
+	updateLoading(`Updating to v${latestVersion}...`);
+
+	const proc = Bun.spawn(['bun', 'add', '-g', '@myrialabs/clopen@latest'], {
+		stdout: 'pipe',
+		stderr: 'pipe'
+	});
+
+	const [stdout, stderr] = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text()
+	]);
+
+	const exitCode = await proc.exited;
+	stopLoading();
+
+	if (exitCode !== 0) {
+		const output = (stdout + '\n' + stderr).trim();
+		console.error('❌ Update failed:');
+		console.error(output);
+		process.exit(exitCode);
+	}
+
+	console.log(`✓ Updated to v${latestVersion}`);
+	console.log('\n  Restart clopen to apply the update.');
+}
+
+async function recoverAdminToken() {
+	const version = getVersion();
+	console.log(`\x1b[36mClopen\x1b[0m v${version} — Admin Token Recovery\n`);
+
+	// Initialize database (import dynamically to avoid loading full backend)
+	const { initializeDatabase } = await import('../backend/lib/database/index');
+	const { listUsers, regeneratePAT } = await import('../backend/lib/auth/auth-service');
+
+	await initializeDatabase();
+
+	const users = listUsers();
+	const admin = users.find(u => u.role === 'admin');
+
+	if (!admin) {
+		console.error('❌ No admin user found. Start clopen first to complete setup.');
+		process.exit(1);
+	}
+
+	const newPAT = regeneratePAT(admin.id);
+
+	console.log(`  Admin  : ${admin.name}`);
+	console.log(`  New PAT: \x1b[32m${newPAT}\x1b[0m`);
+	console.log(`\n  Use this token to log in. Keep it safe — it won't be shown again.`);
 }
 
 async function setupEnvironment() {
@@ -285,13 +400,42 @@ async function main() {
 
 		// Show version if requested
 		if (options.version) {
-			console.log(getVersion());
+			const currentVersion = getVersion();
+			console.log(`v${currentVersion}`);
+
+			try {
+				const response = await fetch('https://registry.npmjs.org/@myrialabs/clopen/latest');
+				if (response.ok) {
+					const data = await response.json() as { version: string };
+					if (isNewerVersion(currentVersion, data.version)) {
+						console.log(`\x1b[33mUpdate available: v${data.version}\x1b[0m — run \x1b[36mclopen update\x1b[0m to update`);
+					} else {
+						console.log('\x1b[32m(latest)\x1b[0m');
+					}
+				}
+			} catch {
+				// Silent fail — network unavailable
+			}
+
 			process.exit(0);
 		}
 
 		// Show help if requested
 		if (options.help) {
 			showHelp();
+			process.exit(0);
+		}
+
+		// Run update if requested
+		if (options.update) {
+			await runUpdate();
+			process.exit(0);
+		}
+
+		// Recover admin token if requested
+		if (options.resetPat) {
+			await setupEnvironment();
+			await recoverAdminToken();
 			process.exit(0);
 		}
 

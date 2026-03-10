@@ -6,6 +6,7 @@
 
 import { WSClient } from '$shared/utils/ws-client';
 import type { WSAPI } from '$backend/ws';
+import { setConnectionStatus } from '$frontend/lib/stores/ui/connection.svelte';
 
 /**
  * Get WebSocket URL based on environment
@@ -21,7 +22,10 @@ const ws = new WSClient<WSAPI>(getWebSocketUrl(), {
 	autoReconnect: true,
 	maxReconnectAttempts: 0, // Infinite reconnect
 	reconnectDelay: 1000,
-	maxReconnectDelay: 30000
+	maxReconnectDelay: 30000,
+	onStatusChange: (status, reconnectAttempts) => {
+		setConnectionStatus(status, reconnectAttempts);
+	}
 });
 
 // CRITICAL: Handle Vite HMR to prevent WebSocket connection accumulation

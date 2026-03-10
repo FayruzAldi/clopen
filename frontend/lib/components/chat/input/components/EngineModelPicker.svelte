@@ -3,6 +3,7 @@
 	import { settings } from '$frontend/lib/stores/features/settings.svelte';
 	import { modelStore } from '$frontend/lib/stores/features/models.svelte';
 	import { sessionState } from '$frontend/lib/stores/core/sessions.svelte';
+	import { appState } from '$frontend/lib/stores/core/app.svelte';
 	import { userStore } from '$frontend/lib/stores/features/user.svelte';
 	import { chatModelState, initChatModel, restoreChatModelFromSession } from '$frontend/lib/stores/ui/chat-model.svelte';
 	import { ENGINES } from '$shared/constants/engines';
@@ -121,9 +122,9 @@
 	// Model Picker (existing logic)
 	// ════════════════════════════════════════════
 
-	// Track whether a chat has started (any user message in current session)
+	// Track whether a chat has started (any user message in current session, or session has history e.g. restored to initial)
 	const hasStartedChat = $derived(
-		sessionState.messages.some(m => m.type === 'user')
+		sessionState.messages.some(m => m.type === 'user') || sessionState.hasMessageHistory
 	);
 
 	// Engine lock: once chat starts, the engine is locked for this session.
@@ -395,14 +396,16 @@
 	}
 </script>
 
-<div class="flex items-center gap-1.5 px-4 pt-2 pb-0.5 -mb-2">
+<div class="flex items-center gap-1.5 px-4 pt-2 pb-0.5">
 	<button
 		bind:this={triggerButton}
 		type="button"
 		class="flex items-center gap-1.5 px-2 py-1 text-xs rounded-lg transition-all duration-150
 			bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700
-			text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+			text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700
+			disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-slate-100 dark:disabled:hover:bg-slate-800"
 		onclick={toggleDropdown}
+		disabled={appState.isLoading}
 	>
 		{#if currentEngine}
 			<div class="flex dark:hidden items-center justify-center w-3.5 h-3.5 [&>svg]:w-full [&>svg]:h-full">{@html currentEngine.icon.light}</div>
@@ -420,8 +423,10 @@
 				type="button"
 				class="flex items-center gap-1.5 px-2 py-1 text-xs rounded-lg transition-all duration-150
 					bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700
-					text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+					text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700
+					disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-slate-100 dark:disabled:hover:bg-slate-800"
 				onclick={toggleAccountDropdown}
+				disabled={appState.isLoading}
 			>
 				<Icon name="lucide:user" class="w-3.5 h-3.5" />
 				<span class="font-medium max-w-24 truncate">{currentAccount?.name || 'Account'}</span>

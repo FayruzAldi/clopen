@@ -20,6 +20,11 @@ import * as migration018 from './018_create_claude_accounts_table';
 import * as migration019 from './019_add_claude_account_to_sessions';
 import * as migration020 from './020_add_snapshot_tree_hash';
 import * as migration021 from './021_drop_prompt_templates_table';
+import * as migration022 from './022_add_snapshot_changes_column';
+import * as migration023 from './023_create_user_unread_sessions_table';
+import * as migration024 from './024_create_users_table';
+import * as migration025 from './025_create_auth_sessions_table';
+import * as migration026 from './026_create_invite_tokens_table';
 
 // Export all migrations in order
 export const migrations = [
@@ -148,6 +153,36 @@ export const migrations = [
 		description: migration021.description,
 		up: migration021.up,
 		down: migration021.down
+	},
+	{
+		id: '022',
+		description: migration022.description,
+		up: migration022.up,
+		down: migration022.down
+	},
+	{
+		id: '023',
+		description: migration023.description,
+		up: migration023.up,
+		down: migration023.down
+	},
+	{
+		id: '024',
+		description: migration024.description,
+		up: migration024.up,
+		down: migration024.down
+	},
+	{
+		id: '025',
+		description: migration025.description,
+		up: migration025.up,
+		down: migration025.down
+	},
+	{
+		id: '026',
+		description: migration026.description,
+		up: migration026.up,
+		down: migration026.down
 	}
 ];
 

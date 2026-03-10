@@ -156,13 +156,13 @@
 
 ---
 
-## Collaboration
+## Authentication & Collaboration
 
-### 18. Anonymous User System
+### 18. Invite-Based Authentication with Admin/Member Roles
 
-**Decision:** Animal-based identity generation without authentication
-**Rationale:** Enables collaboration without user accounts, privacy-first, friendly identities with color-coded avatars from username hash, LocalStorage persistence.
-**Trade-offs:** No persistent identity across devices.
+**Decision:** Token-based auth with invite system instead of anonymous access
+**Rationale:** Production deployments need access control. Admin sets up first, invites members via time-limited links (15 min expiry). Three token types: session (`clp_ses_*`, 30-day, auto-reconnect), PAT (`clp_pat_*`, permanent, cross-device login), invite (`clp_inv_*`, single-use). All tokens are 32 bytes (64 hex chars), SHA-256 hashed before storage. Rate limiting protects against brute-force (progressive lockout: 5 fails → 30s, 10 → 2m, 20 → 10m) with session tokens exempt. Admin-only settings (AI Engine, Updates, Data Management) hidden from members. CLI `clopen reset-pat` command provides admin recovery.
+**Trade-offs:** Requires initial setup step, invite links must be shared out-of-band.
 
 ---
 

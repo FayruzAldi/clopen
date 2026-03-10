@@ -2,7 +2,6 @@
 	import type { AskUserQuestionToolInput } from '$shared/types/messaging';
 	import Icon from '$frontend/lib/components/common/Icon.svelte';
 	import ws from '$frontend/lib/utils/ws';
-	import { soundNotification, pushNotification } from '$frontend/lib/services/notification';
 	import { currentSessionId } from '$frontend/lib/stores/core/sessions.svelte';
 	import { appState, updateSessionProcessState } from '$frontend/lib/stores/core/app.svelte';
 	import { debug } from '$shared/utils/logger';
@@ -99,13 +98,9 @@
 		otherActive = initialOther;
 	});
 
-	// Play notification sound when this tool appears and is not yet answered/errored/interrupted
-	$effect(() => {
-		if (!hasResult && !hasSubmitted && !isInterrupted) {
-			soundNotification.play().catch(() => {});
-			pushNotification.sendChatComplete('Claude is asking you a question. Please respond.').catch(() => {});
-		}
-	});
+	// Sound/push notifications for AskUserQuestion are handled globally by
+	// GlobalStreamMonitor (via chat:waiting-input event) — works cross-session,
+	// plays once per tool_use, and does not replay when returning to session.
 
 	function toggleSelection(questionIdx: number, label: string, isMultiSelect: boolean) {
 		const current = selections[questionIdx] || new Set();

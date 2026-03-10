@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { userStore } from '$frontend/lib/stores/features/user.svelte';
+	import { authStore } from '$frontend/lib/stores/features/auth.svelte';
 	import { addNotification } from '$frontend/lib/stores/ui/notification.svelte';
 	import Icon from '../../common/Icon.svelte';
+	import Dialog from '../../common/Dialog.svelte';
 	import { debug } from '$shared/utils/logger';
 
 	// State
@@ -9,113 +10,115 @@
 	let isEditing = $state(false);
 	let isSaving = $state(false);
 
+	// PAT state
+	let showPAT = $state(false);
+	let currentPAT = $state('');
+	let isRegeneratingPAT = $state(false);
+	let showRegenerateConfirm = $state(false);
+
+	const user = $derived(authStore.currentUser);
+
 	// Update input when user changes
 	$effect(() => {
-		if (userStore.currentUser?.name) {
-			userNameInput = userStore.currentUser.name;
+		if (user?.name) {
+			userNameInput = user.name;
 		}
 	});
 
-	// Handle save user name
 	async function saveUserName() {
 		if (!userNameInput.trim()) {
-			addNotification({
-				type: 'error',
-				title: 'Validation Error',
-				message: 'Name cannot be empty'
-			});
+			addNotification({ type: 'error', title: 'Validation Error', message: 'Name cannot be empty' });
 			return;
 		}
 
 		isSaving = true;
-
 		try {
-			const success = await userStore.updateName(userNameInput.trim());
-
-			if (success) {
-				isEditing = false;
-				addNotification({
-					type: 'success',
-					title: 'Updated',
-					message: 'Display name updated successfully'
-				});
-			} else {
-				addNotification({
-					type: 'error',
-					title: 'Error',
-					message: 'Failed to update user name'
-				});
-			}
+			await authStore.updateName(userNameInput.trim());
+			isEditing = false;
+			addNotification({ type: 'success', title: 'Updated', message: 'Display name updated' });
 		} catch (error) {
 			debug.error('settings', 'Error updating user name:', error);
-			addNotification({
-				type: 'error',
-				title: 'Error',
-				message: 'An error occurred while updating user name'
-			});
+			addNotification({ type: 'error', title: 'Error', message: 'Failed to update display name' });
 		} finally {
 			isSaving = false;
 		}
 	}
 
-	// Handle cancel edit
 	function cancelEdit() {
-		userNameInput = userStore.currentUser?.name || '';
+		userNameInput = user?.name || '';
 		isEditing = false;
 	}
 
-	// Handle start edit
 	function startEdit() {
 		isEditing = true;
+	}
+
+	async function regeneratePAT() {
+		isRegeneratingPAT = true;
+		try {
+			const pat = await authStore.regeneratePAT();
+			currentPAT = pat;
+			showPAT = true;
+			showRegenerateConfirm = false;
+			addNotification({ type: 'success', title: 'Regenerated', message: 'Personal Access Token has been regenerated' });
+		} catch (error) {
+			debug.error('settings', 'Error regenerating PAT:', error);
+			addNotification({ type: 'error', title: 'Error', message: 'Failed to regenerate token' });
+		} finally {
+			isRegeneratingPAT = false;
+		}
+	}
+
+	function copyPAT() {
+		navigator.clipboard.writeText(currentPAT);
+		addNotification({ type: 'success', title: 'Copied', message: 'Token copied to clipboard' });
+	}
+
+	async function handleLogout() {
+		await authStore.logout();
 	}
 </script>
 
 <div class="py-1">
 	<h3 class="text-base font-bold text-slate-900 dark:text-slate-100 mb-1.5">User Profile</h3>
 	<p class="text-sm text-slate-600 dark:text-slate-500 mb-5">
-		Manage your identity and display preferences
+		Manage your identity and access
 	</p>
 
-	{#if !userStore.currentUser}
+	{#if !user}
 		<div class="flex items-center justify-center gap-3 py-10 text-slate-600 dark:text-slate-500 text-sm">
-			<div
-				class="w-5 h-5 border-2 border-violet-500/20 border-t-violet-600 rounded-full animate-spin"
-			></div>
+			<div class="w-5 h-5 border-2 border-violet-500/20 border-t-violet-600 rounded-full animate-spin"></div>
 			<span>Loading user settings...</span>
 		</div>
 	{:else}
 		<div class="flex flex-col gap-4">
 			<!-- Current User Card -->
-			<div
-				class="flex items-center gap-3.5 p-4.5 bg-gradient-to-br from-violet-500/10 to-purple-500/5 dark:from-violet-500/10 dark:to-purple-500/8 border border-violet-500/20 rounded-xl"
-			>
+			<div class="flex items-center gap-3.5 p-4.5 bg-gradient-to-br from-violet-500/10 to-purple-500/5 dark:from-violet-500/10 dark:to-purple-500/8 border border-violet-500/20 rounded-xl">
 				<div
 					class="flex items-center justify-center w-12 h-12 rounded-xl text-lg font-bold text-white shrink-0"
-					style="background-color: {userStore.currentUser?.color || '#7c3aed'}"
+					style="background-color: {user.color || '#7c3aed'}"
 				>
-					{userStore.currentUser?.avatar || 'U'}
+					{user.avatar || 'U'}
 				</div>
 				<div class="flex-1 min-w-0">
 					<div class="text-base font-semibold text-slate-900 dark:text-slate-100 mb-0.5">
-						{userStore.currentUser?.name || 'Anonymous User'}
+						{user.name}
 					</div>
-					<div class="text-xs text-slate-600 dark:text-slate-500">Anonymous user identity</div>
+					<div class="text-xs text-slate-600 dark:text-slate-500">
+						{user.role === 'admin' ? 'Administrator' : 'Member'}
+					</div>
 				</div>
-				<div
-					class="flex items-center gap-1.5 py-1.5 px-3 bg-emerald-500/15 rounded-full text-xs font-medium text-emerald-500"
-				>
-					<span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-					<span>Active</span>
+				<div class="flex items-center gap-2">
+					<span class="inline-flex items-center gap-1.5 py-1.5 px-3 bg-{user.role === 'admin' ? 'violet' : 'emerald'}-500/15 rounded-full text-xs font-medium text-{user.role === 'admin' ? 'violet' : 'emerald'}-500">
+						<Icon name="lucide:{user.role === 'admin' ? 'shield' : 'user'}" class="w-3 h-3" />
+						{user.role === 'admin' ? 'Admin' : 'Member'}
+					</span>
 				</div>
 			</div>
 
 			<!-- Edit Display Name -->
-			<div
-				class="p-4 bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-800 rounded-xl"
-			>
-				<div
-					class="flex items-center gap-2 text-sm font-semibold text-slate-500 mb-3"
-				>
+			<div class="p-4 bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-800 rounded-xl">
+				<div class="flex items-center gap-2 text-sm font-semibold text-slate-500 mb-3">
 					<Icon name="lucide:pencil" class="w-4 h-4 opacity-70" />
 					<span>Display Name</span>
 				</div>
@@ -136,9 +139,7 @@
 								disabled={!userNameInput.trim() || isSaving}
 							>
 								{#if isSaving}
-									<div
-										class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"
-									></div>
+									<div class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
 									Saving...
 								{:else}
 									<Icon name="lucide:check" class="w-4 h-4" />
@@ -158,7 +159,7 @@
 				{:else}
 					<div class="flex items-center justify-between gap-3">
 						<div class="text-sm text-slate-900 dark:text-slate-100">
-							{userStore.currentUser?.name || 'Not set'}
+							{user.name}
 						</div>
 						<button
 							type="button"
@@ -172,26 +173,91 @@
 				{/if}
 			</div>
 
-			<!-- User ID -->
-			<div
-				class="p-4 bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-800 rounded-xl"
-			>
-				<div
-					class="flex items-center gap-2 text-sm font-semibold text-slate-500 mb-3"
+			<!-- Personal Access Token -->
+			<div class="p-4 bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-800 rounded-xl">
+				<div class="flex items-center gap-2 text-sm font-semibold text-slate-500 mb-3">
+					<Icon name="lucide:key-round" class="w-4 h-4 opacity-70" />
+					<span>Personal Access Token</span>
+				</div>
+				<p class="text-xs text-slate-600 dark:text-slate-500 mb-3">
+					Use this token to log in from other devices. Keep it secret.
+				</p>
+
+				{#if showPAT && currentPAT}
+					<div class="flex flex-col gap-2 mb-3">
+						<div class="flex items-center gap-2">
+							<code class="flex-1 py-2.5 px-3.5 bg-slate-50 dark:bg-slate-900/80 border border-emerald-500/30 rounded-lg font-mono text-xs text-slate-700 dark:text-slate-300 break-all">
+								{currentPAT}
+							</code>
+							<button
+								type="button"
+								onclick={copyPAT}
+								class="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-all"
+								title="Copy token"
+							>
+								<Icon name="lucide:copy" class="w-4 h-4" />
+							</button>
+						</div>
+						<div class="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+							<Icon name="lucide:triangle-alert" class="w-3.5 h-3.5" />
+							<span>This token is shown only once. Copy and store it securely.</span>
+						</div>
+					</div>
+				{/if}
+
+				<button
+					type="button"
+					onclick={() => { showRegenerateConfirm = true; }}
+					disabled={isRegeneratingPAT}
+					class="inline-flex items-center gap-1.5 py-2 px-3.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-600 dark:text-amber-400 text-xs font-semibold cursor-pointer transition-all duration-150 hover:bg-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
 				>
+					{#if isRegeneratingPAT}
+						<div class="w-3.5 h-3.5 border-2 border-amber-600/30 border-t-amber-600 rounded-full animate-spin"></div>
+						Regenerating...
+					{:else}
+						<Icon name="lucide:refresh-cw" class="w-3.5 h-3.5" />
+						Regenerate Token
+					{/if}
+				</button>
+			</div>
+
+			<!-- User ID -->
+			<div class="p-4 bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-800 rounded-xl">
+				<div class="flex items-center gap-2 text-sm font-semibold text-slate-500 mb-3">
 					<Icon name="lucide:fingerprint" class="w-4 h-4 opacity-70" />
 					<span>User ID</span>
 				</div>
 				<div class="flex flex-col gap-1.5">
-					<code
-						class="py-2.5 px-3.5 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-lg font-mono text-xs text-slate-500 break-all"
-						>{userStore.currentUser?.id || 'Not available'}</code
-					>
-					<span class="text-xs text-slate-600 dark:text-slate-500"
-						>Unique identifier for this session</span
-					>
+					<code class="py-2.5 px-3.5 bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-lg font-mono text-xs text-slate-500 break-all">
+						{user.id}
+					</code>
 				</div>
+			</div>
+
+			<!-- Logout -->
+			<div class="pt-2">
+				<button
+					type="button"
+					onclick={handleLogout}
+					class="inline-flex items-center gap-1.5 py-2.5 px-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-600 dark:text-red-400 text-sm font-semibold cursor-pointer transition-all duration-150 hover:bg-red-500/20 hover:border-red-600/40"
+				>
+					<Icon name="lucide:log-out" class="w-4 h-4" />
+					Sign Out
+				</button>
 			</div>
 		</div>
 	{/if}
 </div>
+
+<!-- Regenerate PAT Confirmation Dialog -->
+<Dialog
+	bind:isOpen={showRegenerateConfirm}
+	onClose={() => { showRegenerateConfirm = false; }}
+	title="Regenerate Access Token"
+	type="warning"
+	message="This will invalidate your current Personal Access Token. Any devices using the old token will need to log in again with the new one. Continue?"
+	confirmText="Regenerate"
+	cancelText="Cancel"
+	showCancel={true}
+	onConfirm={regeneratePAT}
+/>
