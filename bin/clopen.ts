@@ -368,7 +368,23 @@ async function main() {
 
 		// Show version if requested
 		if (options.version) {
-			console.log(getVersion());
+			const currentVersion = getVersion();
+			console.log(`v${currentVersion}`);
+
+			try {
+				const response = await fetch('https://registry.npmjs.org/@myrialabs/clopen/latest');
+				if (response.ok) {
+					const data = await response.json() as { version: string };
+					if (isNewerVersion(currentVersion, data.version)) {
+						console.log(`\x1b[33mUpdate available: v${data.version}\x1b[0m — run \x1b[36mclopen update\x1b[0m to update`);
+					} else {
+						console.log('\x1b[32m(latest)\x1b[0m');
+					}
+				}
+			} catch {
+				// Silent fail — network unavailable
+			}
+
 			process.exit(0);
 		}
 
