@@ -118,7 +118,11 @@ async function startServer() {
 		port: actualPort,
 		hostname: HOST
 	}, () => {
-		console.log(`🚀 Clopen running at http://localhost:${actualPort}`);
+		if (isDevelopment) {
+			console.log('🚀 Backend ready — waiting for frontend...');
+		} else {
+			console.log(`🚀 Clopen running at http://localhost:${actualPort}`);
+		}
 		if (HOST === '0.0.0.0') {
 			const ips = getLocalIps();
 			for (const ip of ips) {
