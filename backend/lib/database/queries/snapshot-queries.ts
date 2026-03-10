@@ -114,7 +114,7 @@ export const snapshotQueries = {
 		const db = getDatabase();
 		const snapshots = db.prepare(`
 			SELECT * FROM message_snapshots
-			WHERE session_id = ?
+			WHERE session_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
 			ORDER BY created_at ASC
 		`).all(sessionId) as MessageSnapshot[];
 
