@@ -30,11 +30,13 @@
 		if (!textareaEl) return;
 		// Reset to single line to measure content
 		textareaEl.style.height = 'auto';
-		// Line height is ~20px for text-xs, so 5 lines max = 100px
+		// Line height is ~20px for text-sm, so 5 lines max = 100px
 		const lineHeight = 20;
 		const maxHeight = lineHeight * 5;
 		const scrollHeight = textareaEl.scrollHeight;
-		textareaEl.style.height = Math.min(scrollHeight, maxHeight) + 'px';
+		const newHeight = Math.min(scrollHeight, maxHeight);
+		textareaEl.style.height = newHeight + 'px';
+		textareaEl.style.overflowY = scrollHeight > maxHeight ? 'auto' : 'hidden';
 	}
 
 	function handleInput() {
@@ -48,9 +50,9 @@
 			bind:this={textareaEl}
 			bind:value={commitMessage}
 			placeholder="Commit message..."
-			class="w-full px-2.5 py-2 text-sm bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-md text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 resize-none outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/20 transition-colors overflow-hidden"
+			class="w-full px-2.5 py-2 text-sm bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-md text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 resize-none outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/20 transition-colors"
 			rows="1"
-			style="height: 27px"
+			style="height: 34px; overflow-y: hidden;"
 			onkeydown={handleKeydown}
 			oninput={handleInput}
 			disabled={isCommitting}
