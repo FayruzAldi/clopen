@@ -14,7 +14,8 @@ import { debug } from '$shared/utils/logger';
 import {
 	buildCheckpointTree,
 	getCheckpointPathToRoot,
-	findSessionEnd
+	findSessionEnd,
+	INITIAL_NODE_ID
 } from '../../lib/snapshot/helpers';
 import { ws } from '$backend/lib/utils/ws';
 
@@ -53,7 +54,11 @@ export const restoreHandler = createRouter()
 			if (project) projectPath = project.path;
 		}
 
-		const result = await snapshotService.checkRestoreConflicts(sessionId, messageId, projectPath);
+		const result = await snapshotService.checkRestoreConflicts(
+			sessionId,
+			messageId === INITIAL_NODE_ID ? null : messageId,
+			projectPath
+		);
 
 		debug.log('snapshot', `Conflict check: ${result.conflicts.length} conflicts, ${result.checkpointsToUndo.length} checkpoints to undo`);
 
@@ -82,11 +87,66 @@ export const restoreHandler = createRouter()
 		})
 	}, async ({ data }) => {
 		const { messageId, sessionId, conflictResolutions } = data;
+		const isInitialRestore = messageId === INITIAL_NODE_ID;
 
-		debug.log('snapshot', 'RESTORE - Moving HEAD to checkpoint');
-		debug.log('snapshot', `Target checkpoint: ${messageId}`);
+		debug.log('snapshot', `RESTORE - ${isInitialRestore ? 'Restoring to initial state' : 'Moving HEAD to checkpoint'}`);
+		debug.log('snapshot', `Target: ${messageId}`);
 		debug.log('snapshot', `Session: ${sessionId}`);
 
+		// Handle restore to initial state (before any messages)
+		if (isInitialRestore) {
+			// Clear HEAD (no messages active)
+			sessionQueries.clearHead(sessionId);
+			debug.log('snapshot', 'HEAD cleared (initial state)');
+
+			// Clear latest_sdk_session_id so next chat starts fresh
+			const db = (await import('../../lib/database')).getDatabase();
+			db.prepare(`UPDATE chat_sessions SET latest_sdk_session_id = NULL WHERE id = ?`).run(sessionId);
+
+			// Clear checkpoint_tree_state
+			checkpointQueries.deleteForSession(sessionId);
+
+			// Restore file system: revert ALL session changes
+			let filesRestored = 0;
+			let filesSkipped = 0;
+
+			const session = sessionQueries.getById(sessionId);
+			if (session) {
+				const project = projectQueries.getById(session.project_id);
+				if (project) {
+					const result = await snapshotService.restoreSessionScoped(
+						project.path,
+						sessionId,
+						null, // null = restore to initial (before all snapshots)
+						conflictResolutions
+					);
+					filesRestored = result.restoredFiles;
+					filesSkipped = result.skippedFiles;
+				}
+			}
+
+			// Broadcast messages-changed
+			try {
+				ws.emit.chatSession(sessionId, 'chat:messages-changed', {
+					sessionId,
+					reason: 'restore',
+					timestamp: new Date().toISOString()
+				});
+			} catch (err) {
+				debug.error('snapshot', 'Failed to broadcast messages-changed:', err);
+			}
+
+			return {
+				restoredTo: {
+					messageId: INITIAL_NODE_ID,
+					timestamp: new Date().toISOString()
+				},
+				filesRestored,
+				filesSkipped
+			};
+		}
+
+		// Regular checkpoint restore
 		// 1. Get the checkpoint message
 		const checkpointMessage = messageQueries.getById(messageId);
 		if (!checkpointMessage) {

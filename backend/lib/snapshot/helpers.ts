@@ -7,6 +7,9 @@ import type { DatabaseMessage } from '$shared/types/database/schema';
  * Snapshot domain helper functions
  */
 
+/** Sentinel ID for the "initial state" node (before any chat messages) */
+export const INITIAL_NODE_ID = '__initial__';
+
 export interface CheckpointNode {
 	id: string;
 	messageId: string;
@@ -18,6 +21,7 @@ export interface CheckpointNode {
 	isOrphaned: boolean; // descendant of current active checkpoint
 	isCurrent: boolean; // this is the current active checkpoint
 	hasSnapshot: boolean;
+	isInitial?: boolean; // true for the "initial state" node
 	senderName?: string | null;
 	// File change statistics (git-like)
 	filesChanged?: number;

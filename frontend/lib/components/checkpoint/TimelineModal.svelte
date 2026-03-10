@@ -459,9 +459,7 @@
 	type="warning"
 	title="Restore Checkpoint"
 	message={pendingNode
-		? `Are you sure you want to restore to this checkpoint?
-"${getTruncatedMessage(pendingNode.checkpoint.messageText)}"
-This will restore your files to this point within this session.`
+		? `Are you sure you want to restore to this checkpoint?\n"${getTruncatedMessage(pendingNode.checkpoint.messageText)}"\nThis will restore your files to this point within this session.`
 		: ''}
 	confirmText="Restore"
 	cancelText="Cancel"

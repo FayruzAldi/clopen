@@ -79,7 +79,7 @@
 
 		try {
 			// Get messages from current HEAD checkpoint (active branch only)
-			const messages = await ws.http('messages:list', { session_id: sessionId });
+			const messages = await ws.http('messages:list', { session_id: sessionId, include_all: true });
 
 			// Get title from first user message in current HEAD
 			const firstUserMessage = messages.find((m: SDKMessage) => m.type === 'user');

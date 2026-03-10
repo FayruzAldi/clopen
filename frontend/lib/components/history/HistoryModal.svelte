@@ -71,7 +71,7 @@
 		}
 
 		try {
-			const messages = await ws.http('messages:list', { session_id: sessionId });
+			const messages = await ws.http('messages:list', { session_id: sessionId, include_all: true });
 
 			const firstUserMessage = messages.find((m: SDKMessage) => m.type === 'user');
 			let title = 'New Conversation';

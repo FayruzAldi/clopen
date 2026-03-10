@@ -21,6 +21,7 @@
 
 	const pos = $derived(getInterpolatedPosition(node, animationState));
 	const nodeClass = $derived(getInterpolatedNodeClass(node));
+	const isInitial = $derived(!!node.checkpoint.isInitial);
 </script>
 
 <!-- Node group -->
@@ -33,6 +34,7 @@
 	aria-label={`${node.type === 'main' ? 'Checkpoint' : 'Version'} - ${node.checkpoint.messageText}`}
 >
 	<title>{node.checkpoint.messageText}</title>
+
 	<!-- Node circle -->
 	<circle
 		cx={pos.x}
@@ -84,25 +86,34 @@
 		height={SIZE.labelHeight - 8}
 	>
 		<div class="flex flex-col h-full justify-center pointer-events-none">
-			<!-- Timestamp and file stats in one line -->
-			<div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 leading-tight">
-				<span>{formatTime(node.checkpoint.timestamp)}</span>
-				<span class="w-px h-3 bg-slate-300 dark:bg-slate-600"></span>
-				<span class="flex items-center gap-0.5">
-					<Icon name="lucide:file-text" class="w-2.5 h-2.5" />
-					{node.checkpoint.filesChanged ?? 0}
-				</span>
-				<span class="text-green-600 dark:text-green-400">
-					+{node.checkpoint.insertions ?? 0}
-				</span>
-				<span class="text-red-600 dark:text-red-400">
-					-{node.checkpoint.deletions ?? 0}
-				</span>
-			</div>
-			<!-- Message text below timestamp with auto truncation -->
-			<div class="text-sm text-slate-900 dark:text-slate-100 leading-tight truncate mt-0.5">
-				{node.checkpoint.messageText}
-			</div>
+			{#if isInitial}
+				<div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 leading-tight">
+					<span>{formatTime(node.checkpoint.timestamp)}</span>
+				</div>
+				<div class="text-sm text-slate-900 dark:text-slate-100 leading-tight truncate mt-0.5">
+					Session Start
+				</div>
+			{:else}
+				<!-- Timestamp and file stats in one line -->
+				<div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 leading-tight">
+					<span>{formatTime(node.checkpoint.timestamp)}</span>
+					<span class="w-px h-3 bg-slate-300 dark:bg-slate-600"></span>
+					<span class="flex items-center gap-0.5">
+						<Icon name="lucide:file-text" class="w-2.5 h-2.5" />
+						{node.checkpoint.filesChanged ?? 0}
+					</span>
+					<span class="text-green-600 dark:text-green-400">
+						+{node.checkpoint.insertions ?? 0}
+					</span>
+					<span class="text-red-600 dark:text-red-400">
+						-{node.checkpoint.deletions ?? 0}
+					</span>
+				</div>
+				<!-- Message text below timestamp with auto truncation -->
+				<div class="text-sm text-slate-900 dark:text-slate-100 leading-tight truncate mt-0.5">
+					{node.checkpoint.messageText}
+				</div>
+			{/if}
 		</div>
 	</foreignObject>
 </g>

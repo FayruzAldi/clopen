@@ -22,6 +22,8 @@ interface SessionState {
 	messages: SDKMessageFormatter[];
 	isLoading: boolean;
 	error: string | null;
+	/** True if the current session has message history (even if HEAD is null after restore to initial) */
+	hasMessageHistory: boolean;
 }
 
 // Session state using Svelte 5 runes
@@ -30,7 +32,8 @@ export const sessionState = $state<SessionState>({
 	currentSession: null,
 	messages: [],
 	isLoading: false,
-	error: null
+	error: null,
+	hasMessageHistory: false
 });
 
 // ========================================
@@ -206,6 +209,7 @@ export function updateMessages(messages: SDKMessageFormatter[]) {
 
 export function clearMessages() {
 	sessionState.messages = [];
+	sessionState.hasMessageHistory = false;
 }
 
 export async function loadMessagesForSession(sessionId: string) {
@@ -215,12 +219,22 @@ export async function loadMessagesForSession(sessionId: string) {
 		if (response && Array.isArray(response)) {
 			// Messages from server already have correct SDKMessageFormatter shape with metadata
 			sessionState.messages = response as SDKMessageFormatter[];
+
+			if (response.length > 0) {
+				sessionState.hasMessageHistory = true;
+			} else {
+				// HEAD might be null (restored to initial) — check if session has any messages at all
+				const allResponse = await ws.http('messages:list', { session_id: sessionId, include_all: true });
+				sessionState.hasMessageHistory = Array.isArray(allResponse) && allResponse.length > 0;
+			}
 		} else {
 			sessionState.messages = [];
+			sessionState.hasMessageHistory = false;
 		}
 	} catch (error) {
 		debug.error('session', 'Error loading messages:', error);
 		sessionState.messages = [];
+		sessionState.hasMessageHistory = false;
 	}
 }
 

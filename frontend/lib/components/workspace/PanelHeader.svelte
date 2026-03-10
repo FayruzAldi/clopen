@@ -277,7 +277,7 @@
 				>
 					<Icon name="lucide:history" class={isMobile ? 'w-4.5 h-4.5' : 'w-4 h-4'} />
 				</button>
-				{#if sessionState.messages.length > 0}
+					{#if sessionState.messages.length > 0 || sessionState.hasMessageHistory}
 					<button
 						type="button"
 						class="flex items-center justify-center {isMobile ? 'w-9 h-9' : 'w-6 h-6'} bg-transparent border-none rounded-md text-slate-500 cursor-pointer transition-all duration-150 hover:bg-violet-500/10 hover:text-slate-900 dark:hover:text-slate-100"
