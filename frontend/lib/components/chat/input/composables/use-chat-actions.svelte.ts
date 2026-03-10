@@ -45,10 +45,10 @@ export function useChatActions(params: ChatActionsParams) {
 		// If in edit mode, restore to parent of edited message first
 		if (editModeState.isEditing) {
 			try {
-				// Restore to parent of edited message (if exists)
-				const restoreTargetId = editModeState.parentMessageId || editModeState.messageId;
-
-				if (restoreTargetId && sessionState.currentSession?.id) {
+				if (sessionState.currentSession?.id) {
+					// Restore to parent of edited message (state before the edited message)
+					// When parentMessageId is null (editing first message), restore to initial state
+					const restoreTargetId = editModeState.parentMessageId || '__initial__';
 					await snapshotService.restore(restoreTargetId, sessionState.currentSession.id);
 				}
 
