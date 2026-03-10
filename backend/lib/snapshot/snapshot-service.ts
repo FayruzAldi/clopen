@@ -286,50 +286,16 @@ export class SnapshotService {
 	async checkRestoreConflicts(
 		sessionId: string,
 		targetCheckpointMessageId: string | null,
-		projectPath?: string
+		projectPath?: string,
+		targetPath?: string[]
 	): Promise<RestoreConflictCheck> {
 		const sessionSnapshots = snapshotQueries.getBySessionId(sessionId);
-
-		// null = restore to initial state (before all snapshots)
 		const isInitialRestore = targetCheckpointMessageId === null;
 
-		const targetIndex = isInitialRestore
-			? -1
-			: sessionSnapshots.findIndex(s => s.message_id === targetCheckpointMessageId);
-
-		if (!isInitialRestore && targetIndex === -1) {
-			return { hasConflicts: false, conflicts: [], checkpointsToUndo: [] };
-		}
-
-		// Build expected state at target (same bidirectional algorithm as restoreSessionScoped)
-		// This determines ALL files that would be affected by the restore
-		const expectedState = new Map<string, string>(); // filepath → expectedHash
-
-		// For initial restore, targetIndex=-1, so this loop doesn't execute (correct: no forward changes)
-		for (let i = 0; i <= targetIndex; i++) {
-			const snap = sessionSnapshots[i];
-			if (!snap.session_changes) continue;
-			try {
-				const changes = JSON.parse(snap.session_changes) as SessionScopedChanges;
-				for (const [filepath, change] of Object.entries(changes)) {
-					expectedState.set(filepath, change.newHash);
-				}
-			} catch { /* skip malformed */ }
-		}
-
-		// For initial restore, all snapshots are "after target" → revert all to oldHash
-		for (let i = targetIndex + 1; i < sessionSnapshots.length; i++) {
-			const snap = sessionSnapshots[i];
-			if (!snap.session_changes) continue;
-			try {
-				const changes = JSON.parse(snap.session_changes) as SessionScopedChanges;
-				for (const [filepath, change] of Object.entries(changes)) {
-					if (!expectedState.has(filepath)) {
-						expectedState.set(filepath, change.oldHash);
-					}
-				}
-			} catch { /* skip malformed */ }
-		}
+		// Build expected state at target (branch-aware when targetPath is provided)
+		const expectedState = this.buildExpectedState(
+			sessionSnapshots, targetCheckpointMessageId, targetPath
+		);
 
 		if (expectedState.size === 0) {
 			return { hasConflicts: false, conflicts: [], checkpointsToUndo: [] };
@@ -360,7 +326,9 @@ export class SnapshotService {
 		// Determine reference time for cross-session conflict check
 		// Use min(targetTime, currentHeadTime) to cover both undo and redo
 		// For initial restore, use the session's created_at or the earliest snapshot time
-		const targetSnapshot = isInitialRestore ? null : sessionSnapshots[targetIndex];
+		const targetSnapshot = isInitialRestore
+			? null
+			: sessionSnapshots.find(s => s.message_id === targetCheckpointMessageId) || null;
 		const targetTime = targetSnapshot
 			? targetSnapshot.created_at
 			: (sessionSnapshots[0]?.created_at || new Date(0).toISOString());
@@ -482,65 +450,29 @@ export class SnapshotService {
 	 * Restore to a checkpoint using session-scoped changes.
 	 * Works in both directions (forward and backward).
 	 *
-	 * Algorithm:
-	 * 1. Walk snapshots [0..targetIndex] → build expected file state at target
-	 * 2. Walk snapshots [targetIndex+1..end] → files changed only after target need reverting
-	 * 3. For each file in the expected state map, compare with current disk and restore if different
+	 * When targetPath is provided, uses branch-aware algorithm:
+	 * 1. Only apply changes from snapshots on the path (root → target)
+	 * 2. Revert ALL changes from snapshots on other branches
+	 * 3. Compare expected state with disk and restore if different
 	 * 4. Update in-memory baseline to match restored state
+	 *
+	 * Falls back to linear algorithm when targetPath is not provided.
 	 */
 	async restoreSessionScoped(
 		projectPath: string,
 		sessionId: string,
 		targetCheckpointMessageId: string | null,
-		conflictResolutions?: ConflictResolution
+		conflictResolutions?: ConflictResolution,
+		targetPath?: string[]
 	): Promise<{ restoredFiles: number; skippedFiles: number }> {
 		try {
 			const sessionSnapshots = snapshotQueries.getBySessionId(sessionId);
 
-			// null = restore to initial state (before all snapshots)
-			const isInitialRestore = targetCheckpointMessageId === null;
-
-			const targetIndex = isInitialRestore
-				? -1
-				: sessionSnapshots.findIndex(s => s.message_id === targetCheckpointMessageId);
-
-			if (!isInitialRestore && targetIndex === -1) {
-				debug.warn('snapshot', 'Target checkpoint snapshot not found');
-				return { restoredFiles: 0, skippedFiles: 0 };
-			}
-
 			// Build expected file state at the target checkpoint
-			// filepath → hash that the file should be at the target
-			const expectedState = new Map<string, string>();
-
-			// Walk snapshots from first to target (inclusive): apply forward changes
-			// For initial restore (targetIndex=-1), this loop doesn't execute
-			for (let i = 0; i <= targetIndex; i++) {
-				const snap = sessionSnapshots[i];
-				if (!snap.session_changes) continue;
-				try {
-					const changes = JSON.parse(snap.session_changes) as SessionScopedChanges;
-					for (const [filepath, change] of Object.entries(changes)) {
-						expectedState.set(filepath, change.newHash);
-					}
-				} catch { /* skip */ }
-			}
-
-			// Walk snapshots after target: files changed only after target need reverting to oldHash
-			// For initial restore, ALL snapshots are "after target" → revert everything
-			for (let i = targetIndex + 1; i < sessionSnapshots.length; i++) {
-				const snap = sessionSnapshots[i];
-				if (!snap.session_changes) continue;
-				try {
-					const changes = JSON.parse(snap.session_changes) as SessionScopedChanges;
-					for (const [filepath, change] of Object.entries(changes)) {
-						if (!expectedState.has(filepath)) {
-							// File was first changed AFTER target → revert to pre-change state
-							expectedState.set(filepath, change.oldHash);
-						}
-					}
-				} catch { /* skip */ }
-			}
+			// Branch-aware when targetPath is provided
+			const expectedState = this.buildExpectedState(
+				sessionSnapshots, targetCheckpointMessageId, targetPath
+			);
 
 			debug.log('snapshot', `Restore to checkpoint: ${expectedState.size} files in expected state`);
 
@@ -614,6 +546,124 @@ export class SnapshotService {
 	// ========================================================================
 	// Helpers
 	// ========================================================================
+
+	/**
+	 * Build the expected file state map for a restore operation.
+	 *
+	 * Branch-aware algorithm (when targetPath is provided):
+	 * 1. Separate snapshots into path (root→target) vs non-path
+	 * 2. Forward walk: only apply newHash from snapshots on the path (in path order)
+	 * 3. Revert walk: revert ALL non-path snapshots using oldHash (first-wins)
+	 *
+	 * This correctly handles multi-branch checkpoint trees by NOT including
+	 * changes from other branches in the forward walk.
+	 *
+	 * Fallback linear algorithm (when targetPath is not provided):
+	 * Walks all snapshots chronologically — only correct for single-branch paths.
+	 */
+	private buildExpectedState(
+		sessionSnapshots: MessageSnapshot[],
+		targetCheckpointMessageId: string | null,
+		targetPath?: string[]
+	): Map<string, string> {
+		const expectedState = new Map<string, string>();
+		const isInitialRestore = targetCheckpointMessageId === null;
+
+		if (isInitialRestore) {
+			// Revert ALL snapshots → everything goes back to oldHash (first-wins)
+			for (const snap of sessionSnapshots) {
+				if (!snap.session_changes) continue;
+				try {
+					const changes = JSON.parse(snap.session_changes as string) as SessionScopedChanges;
+					for (const [filepath, change] of Object.entries(changes)) {
+						if (!expectedState.has(filepath)) {
+							expectedState.set(filepath, change.oldHash);
+						}
+					}
+				} catch { /* skip malformed */ }
+			}
+		} else if (targetPath && targetPath.length > 0) {
+			// Branch-aware restore: only include snapshots on the path from root to target
+			const pathSet = new Set(targetPath);
+
+			// Separate snapshots into path vs non-path
+			const snapshotByMsgId = new Map<string, MessageSnapshot>();
+			const nonPathSnapshots: MessageSnapshot[] = [];
+
+			for (const snap of sessionSnapshots) {
+				if (pathSet.has(snap.message_id)) {
+					snapshotByMsgId.set(snap.message_id, snap);
+				} else {
+					nonPathSnapshots.push(snap);
+				}
+			}
+
+			// Forward walk: apply path snapshots in path order (root → target)
+			// Later path snapshots overwrite earlier ones for the same file (correct)
+			for (const cpId of targetPath) {
+				const snap = snapshotByMsgId.get(cpId);
+				if (!snap?.session_changes) continue;
+				try {
+					const changes = JSON.parse(snap.session_changes as string) as SessionScopedChanges;
+					for (const [filepath, change] of Object.entries(changes)) {
+						expectedState.set(filepath, change.newHash);
+					}
+				} catch { /* skip malformed */ }
+			}
+
+			// Revert all non-path snapshots (changes on other branches)
+			// Process in chronological order with first-wins semantics:
+			// if two non-path snapshots change the same file, the earliest one's
+			// oldHash is used (state before any branch diverged)
+			for (const snap of nonPathSnapshots) {
+				if (!snap.session_changes) continue;
+				try {
+					const changes = JSON.parse(snap.session_changes as string) as SessionScopedChanges;
+					for (const [filepath, change] of Object.entries(changes)) {
+						if (!expectedState.has(filepath)) {
+							expectedState.set(filepath, change.oldHash);
+						}
+					}
+				} catch { /* skip malformed */ }
+			}
+		} else {
+			// Fallback: linear algorithm (no path info available)
+			const targetIndex = sessionSnapshots.findIndex(
+				s => s.message_id === targetCheckpointMessageId
+			);
+
+			if (targetIndex === -1) {
+				debug.warn('snapshot', 'Target checkpoint snapshot not found (linear fallback)');
+				return expectedState;
+			}
+
+			for (let i = 0; i <= targetIndex; i++) {
+				const snap = sessionSnapshots[i];
+				if (!snap.session_changes) continue;
+				try {
+					const changes = JSON.parse(snap.session_changes as string) as SessionScopedChanges;
+					for (const [filepath, change] of Object.entries(changes)) {
+						expectedState.set(filepath, change.newHash);
+					}
+				} catch { /* skip malformed */ }
+			}
+
+			for (let i = targetIndex + 1; i < sessionSnapshots.length; i++) {
+				const snap = sessionSnapshots[i];
+				if (!snap.session_changes) continue;
+				try {
+					const changes = JSON.parse(snap.session_changes as string) as SessionScopedChanges;
+					for (const [filepath, change] of Object.entries(changes)) {
+						if (!expectedState.has(filepath)) {
+							expectedState.set(filepath, change.oldHash);
+						}
+					}
+				} catch { /* skip malformed */ }
+			}
+		}
+
+		return expectedState;
+	}
 
 	/**
 	 * Calculate line-level change stats for changed files.

@@ -55,10 +55,30 @@ export const restoreHandler = createRouter()
 			if (project) projectPath = project.path;
 		}
 
+		// Build checkpoint path for branch-aware conflict detection
+		let targetPath: string[] | undefined;
+		let resolvedMessageId: string | null = messageId === INITIAL_NODE_ID ? null : messageId;
+
+		if (messageId !== INITIAL_NODE_ID) {
+			const allMessages = messageQueries.getAllBySessionId(sessionId);
+			const { checkpoints, parentMap } = buildCheckpointTree(allMessages);
+			const checkpointIdSet = new Set(checkpoints.map(c => c.id));
+
+			const resolvedId = checkpointIdSet.has(messageId)
+				? messageId
+				: findCheckpointForHead(messageId, allMessages, checkpointIdSet);
+
+			if (resolvedId) {
+				resolvedMessageId = resolvedId;
+				targetPath = getCheckpointPathToRoot(resolvedId, parentMap);
+			}
+		}
+
 		const result = await snapshotService.checkRestoreConflicts(
 			sessionId,
-			messageId === INITIAL_NODE_ID ? null : messageId,
-			projectPath
+			resolvedMessageId,
+			projectPath,
+			targetPath
 		);
 
 		debug.log('snapshot', `Conflict check: ${result.conflicts.length} conflicts, ${result.checkpointsToUndo.length} checkpoints to undo`);
@@ -209,8 +229,10 @@ export const restoreHandler = createRouter()
 
 		// 6. Update checkpoint_tree_state for ancestors
 		// Use resolved checkpoint ID (not raw messageId which may be a non-checkpoint)
+		// Also compute checkpointPath for branch-aware file restore
+		let checkpointPath: string[] = [];
 		if (resolvedCheckpointId) {
-			const checkpointPath = getCheckpointPathToRoot(resolvedCheckpointId, parentMap);
+			checkpointPath = getCheckpointPathToRoot(resolvedCheckpointId, parentMap);
 			if (checkpointPath.length > 1) {
 				checkpointQueries.updateActiveChildrenAlongPath(sessionId, checkpointPath);
 			}
@@ -230,7 +252,8 @@ export const restoreHandler = createRouter()
 					project.path,
 					sessionId,
 					resolvedCheckpointId,
-					conflictResolutions
+					conflictResolutions,
+					checkpointPath.length > 0 ? checkpointPath : undefined
 				);
 				filesRestored = result.restoredFiles;
 				filesSkipped = result.skippedFiles;
