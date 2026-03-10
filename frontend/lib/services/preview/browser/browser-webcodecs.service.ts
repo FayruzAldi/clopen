@@ -175,6 +175,17 @@ export class BrowserWebCodecsService {
 			return false;
 		}
 
+		// Pre-initialize AudioContext NOW, during user gesture context.
+		// Browsers require a user gesture to start AudioContext — creating it
+		// later (e.g. when first audio chunk arrives) results in a permanently
+		// suspended context that never plays audio.
+		if (!this.audioContext || this.audioContext.state === 'closed') {
+			this.audioContext = new AudioContext({ sampleRate: 48000 });
+		}
+		if (this.audioContext.state === 'suspended') {
+			await this.audioContext.resume().catch(() => {});
+		}
+
 		// Clean up any existing connection
 		if (this.peerConnection || this.isConnected || this.sessionId) {
 			debug.log('webcodecs', 'Cleaning up previous connection');
@@ -546,7 +557,7 @@ export class BrowserWebCodecsService {
 	private async initAudioDecoder(): Promise<void> {
 		this.audioCodecConfig = {
 			codec: 'opus',
-			sampleRate: 44100,
+			sampleRate: 48000,
 			numberOfChannels: 2
 		};
 
@@ -580,8 +591,17 @@ export class BrowserWebCodecsService {
 	 */
 	private async initAudioContext(): Promise<void> {
 		try {
-			this.audioContext = new AudioContext({ sampleRate: 44100 });
-			debug.log('webcodecs', 'AudioContext initialized');
+			// Reuse AudioContext created in startStreaming (user gesture context)
+			if (!this.audioContext || this.audioContext.state === 'closed') {
+				this.audioContext = new AudioContext({ sampleRate: 48000 });
+			}
+
+			// Resume if suspended (may happen without user gesture)
+			if (this.audioContext.state === 'suspended') {
+				await this.audioContext.resume();
+			}
+
+			debug.log('webcodecs', `AudioContext initialized (state: ${this.audioContext.state})`);
 		} catch (error) {
 			debug.error('webcodecs', 'AudioContext init error:', error);
 		}
@@ -736,6 +756,11 @@ export class BrowserWebCodecsService {
 	 */
 	private playAudioFrame(audioData: AudioData): void {
 		if (!this.audioContext) return;
+
+		// Safety net: resume AudioContext if it somehow got suspended
+		if (this.audioContext.state === 'suspended') {
+			this.audioContext.resume().catch(() => {});
+		}
 
 		try {
 			// Create AudioBuffer
@@ -1151,11 +1176,9 @@ export class BrowserWebCodecsService {
 			this.audioDecoder = null;
 		}
 
-		// Close audio context
-		if (this.audioContext && this.audioContext.state !== 'closed') {
-			await this.audioContext.close().catch(() => {});
-			this.audioContext = null;
-		}
+		// Keep AudioContext alive across reconnections — it was created during
+		// user gesture in startStreaming() and closing it means we can't resume
+		// without another user gesture. Just reset playback state below.
 
 		// Close data channel
 		if (this.dataChannel) {

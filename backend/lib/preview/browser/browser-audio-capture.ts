@@ -11,12 +11,29 @@ import { audioCaptureScript } from './scripts/audio-stream';
 
 export class BrowserAudioCapture {
 	/**
-	 * Setup audio capture for a page
-	 * Injects audio capture script that intercepts AudioContext before page loads
+	 * Setup audio capture for a page (pre-navigation).
+	 * WARNING: Uses evaluateOnNewDocument which patches AudioContext BEFORE page
+	 * scripts run. This is detected by Cloudflare's fingerprinting.
+	 * Prefer injectAudioCapture() for post-navigation injection.
 	 */
 	async setupAudioCapture(page: Page, config: StreamingConfig['audio']): Promise<void> {
-		// Inject audio capture script BEFORE page loads to intercept AudioContext
 		await page.evaluateOnNewDocument(audioCaptureScript, config);
+	}
+
+	/**
+	 * Inject audio capture into the current page context (post-navigation).
+	 * Uses page.evaluate() instead of evaluateOnNewDocument() to avoid
+	 * Cloudflare detection — AudioContext constructor patching before page
+	 * load is heavily flagged by CF's fingerprinting algorithms.
+	 * Call this AFTER navigation completes and CF challenges pass.
+	 */
+	async injectAudioCapture(page: Page, config: StreamingConfig['audio']): Promise<boolean> {
+		try {
+			await page.evaluate(audioCaptureScript, config);
+			return true;
+		} catch {
+			return false;
+		}
 	}
 
 	/**

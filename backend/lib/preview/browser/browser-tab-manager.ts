@@ -627,9 +627,8 @@ export class BrowserTabManager extends EventEmitter {
 		// Setting extra headers alters the HTTP/2 pseudo-header order and capitalization
 		// which immediately gets flagged by Cloudflare's TLS/Fingerprint matching algorithms.
 
-		// Inject audio capture script BEFORE page loads to intercept AudioContext
-		// Temporarily disable audio injection as patching AudioContext is heavily flagged by Cloudflare
-		// await this.audioCapture.setupAudioCapture(page, DEFAULT_STREAMING_CONFIG.audio);
+		// Audio capture is injected post-navigation in BrowserVideoCapture.startStreaming()
+		// to avoid Cloudflare fingerprint detection of AudioContext constructor patching.
 
 		// Simplified cursor tracking for visual feedback only
 		await this.injectCursorTracking(page);
