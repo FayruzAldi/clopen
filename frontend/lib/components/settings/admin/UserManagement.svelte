@@ -73,7 +73,7 @@
 	{:else}
 		<div class="flex flex-col gap-2">
 			{#each users as user (user.id)}
-				<div class="flex items-center gap-3 p-3.5 bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-800 rounded-xl group">
+				<div class="flex items-center gap-3 p-3.5 bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-800 rounded-xl">
 					<div
 						class="flex items-center justify-center w-9 h-9 rounded-lg text-sm font-bold text-white shrink-0"
 						style="background-color: {user.color || '#7c3aed'}"
@@ -100,7 +100,7 @@
 						<button
 							type="button"
 							onclick={() => confirmRemove(user)}
-							class="flex items-center justify-center w-8 h-8 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-all"
+							class="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-all"
 							title="Remove user"
 						>
 							<Icon name="lucide:user-minus" class="w-4 h-4" />

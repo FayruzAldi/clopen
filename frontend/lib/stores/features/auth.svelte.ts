@@ -123,7 +123,7 @@ export const authStore = {
 	},
 
 	/**
-	 * Login with a token (PAT or session token).
+	 * Login with a Personal Access Token (PAT).
 	 */
 	async login(token: string) {
 		const result = await ws.http('auth:login', { token });

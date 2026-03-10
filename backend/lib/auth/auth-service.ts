@@ -277,14 +277,14 @@ export function removeUser(userId: string): void {
  */
 export function createInvite(
 	createdBy: string,
-	options: { label?: string; maxUses?: number; expiresInDays?: number }
+	options: { label?: string; maxUses?: number; expiresInMinutes?: number }
 ): { inviteToken: string; invite: ReturnType<typeof authQueries.getInviteByTokenHash> } {
 	const rawToken = generateInviteToken();
 	const tokenHash = hashToken(rawToken);
 	const now = new Date().toISOString();
 
-	const expiresAt = options.expiresInDays
-		? new Date(Date.now() + options.expiresInDays * 24 * 60 * 60 * 1000).toISOString()
+	const expiresAt = options.expiresInMinutes
+		? new Date(Date.now() + options.expiresInMinutes * 60 * 1000).toISOString()
 		: null;
 
 	const invite = authQueries.createInvite({

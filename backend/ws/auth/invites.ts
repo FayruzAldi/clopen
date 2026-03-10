@@ -9,7 +9,7 @@ export const inviteHandler = createRouter()
 		data: t.Object({
 			label: t.Optional(t.String()),
 			maxUses: t.Optional(t.Number({ minimum: 0 })),
-			expiresInDays: t.Optional(t.Number({ minimum: 1 }))
+			expiresInMinutes: t.Optional(t.Number({ minimum: 1 }))
 		}),
 		response: t.Object({
 			inviteToken: t.String(),
@@ -28,7 +28,7 @@ export const inviteHandler = createRouter()
 		const result = createInvite(userId, {
 			label: data.label,
 			maxUses: data.maxUses,
-			expiresInDays: data.expiresInDays
+			expiresInMinutes: data.expiresInMinutes
 		});
 
 		return {

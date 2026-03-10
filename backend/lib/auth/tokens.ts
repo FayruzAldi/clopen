@@ -17,16 +17,19 @@ function randomHex(bytes: number): string {
 	return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+/** All token types use the same random length for consistency */
+const TOKEN_BYTES = 24; // 48 hex chars
+
 export function generateSessionToken(): string {
-	return SESSION_PREFIX + randomHex(24);
+	return SESSION_PREFIX + randomHex(TOKEN_BYTES);
 }
 
 export function generatePAT(): string {
-	return PAT_PREFIX + randomHex(16);
+	return PAT_PREFIX + randomHex(TOKEN_BYTES);
 }
 
 export function generateInviteToken(): string {
-	return INVITE_PREFIX + randomHex(12);
+	return INVITE_PREFIX + randomHex(TOKEN_BYTES);
 }
 
 /**

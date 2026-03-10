@@ -44,8 +44,15 @@
 	);
 
 	async function handleLogin() {
-		if (!token.trim()) {
+		const trimmed = token.trim();
+
+		if (!trimmed) {
 			error = 'Please enter your access token';
+			return;
+		}
+
+		if (!trimmed.startsWith('clp_pat_')) {
+			error = 'Invalid token format. Use your Personal Access Token (clp_pat_...)';
 			return;
 		}
 
@@ -53,7 +60,7 @@
 		isLoading = true;
 
 		try {
-			await authStore.login(token.trim());
+			await authStore.login(trimmed);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : 'Login failed';
 			error = message;
@@ -96,7 +103,7 @@
 					type="password"
 					bind:value={token}
 					onkeydown={handleKeydown}
-					placeholder="clp_pat_... or clp_ses_..."
+					placeholder="clp_pat_..."
 					disabled={isLoading || isLockedOut}
 					class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:opacity-50"
 				/>

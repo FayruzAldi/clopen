@@ -1,10 +1,7 @@
 <script lang="ts">
 	import { systemSettings, updateSystemSettings } from '$frontend/lib/stores/features/settings.svelte';
-	import { authStore } from '$frontend/lib/stores/features/auth.svelte';
 	import { updateState, checkForUpdate, runUpdate } from '$frontend/lib/stores/ui/update.svelte';
 	import Icon from '../../common/Icon.svelte';
-
-	const isAdmin = $derived(authStore.isAdmin);
 
 	function toggleAutoUpdate() {
 		updateSystemSettings({ autoUpdate: !systemSettings.autoUpdate });
@@ -113,10 +110,8 @@
 				role="switch"
 				aria-checked={systemSettings.autoUpdate}
 				onclick={toggleAutoUpdate}
-				disabled={!isAdmin}
 				class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-violet-500/30
-					{systemSettings.autoUpdate ? 'bg-violet-600' : 'bg-slate-300 dark:bg-slate-600'}
-					{!isAdmin ? 'opacity-50 cursor-not-allowed' : ''}"
+					{systemSettings.autoUpdate ? 'bg-violet-600' : 'bg-slate-300 dark:bg-slate-600'}"
 			>
 				<span
 					class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out
