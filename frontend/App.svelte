@@ -1,38 +1,46 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { authStore } from '$frontend/lib/stores/features/auth.svelte';
 	import WorkspaceLayout from '$frontend/lib/components/workspace/WorkspaceLayout.svelte';
 	import ConnectionBanner from '$frontend/lib/components/common/ConnectionBanner.svelte';
 	import UpdateBanner from '$frontend/lib/components/common/UpdateBanner.svelte';
+	import LoadingScreen from '$frontend/lib/components/common/LoadingScreen.svelte';
+	import SetupPage from '$frontend/lib/components/auth/SetupPage.svelte';
+	import LoginPage from '$frontend/lib/components/auth/LoginPage.svelte';
+	import InvitePage from '$frontend/lib/components/auth/InvitePage.svelte';
 	import { backgroundTerminalService } from '$frontend/lib/services/terminal/background';
 	import { initializeMCPPreview } from '$frontend/lib/services/preview';
 	import { globalStreamMonitor } from '$frontend/lib/services/notification/global-stream-monitor';
 	import { tunnelStore } from '$frontend/lib/stores/features/tunnel.svelte';
 	import { startUpdateChecker, stopUpdateChecker } from '$frontend/lib/stores/ui/update.svelte';
 
-	// NOTE: In Phase 3, we'll need to handle routing for SPA
-	// For now, we'll just render the main workspace
+	let servicesInitialized = false;
 
-	// Initialize background terminal service and MCP preview integration
+	// Initialize auth on mount
 	onMount(async () => {
-		// Initialize global stream monitor FIRST (just registers a WS listener, non-blocking)
-		// Must run before any await to ensure cross-project notifications work immediately
-		globalStreamMonitor.initialize();
+		await authStore.initialize();
+	});
 
-		// Initialize background service first and wait for it
-		await backgroundTerminalService.initialize();
+	// Initialize background services when auth is ready
+	$effect(() => {
+		if (authStore.authState === 'ready' && !servicesInitialized) {
+			servicesInitialized = true;
 
-		// Now background service has restored any persisted sessions
-		// The terminal store will check this when initializing
+			// Initialize global stream monitor (registers WS listener, non-blocking)
+			globalStreamMonitor.initialize();
 
-		// Initialize MCP Preview Integration
-		// This sets up listeners for MCP browser automation events
-		initializeMCPPreview();
+			// Initialize background terminal service
+			backgroundTerminalService.initialize();
 
-		// Restore tunnel status from server
-		tunnelStore.checkStatus();
+			// Initialize MCP Preview Integration
+			initializeMCPPreview();
 
-		// Start periodic update checker
-		startUpdateChecker();
+			// Restore tunnel status
+			tunnelStore.checkStatus();
+
+			// Start periodic update checker
+			startUpdateChecker();
+		}
 	});
 
 	onDestroy(() => {
@@ -40,16 +48,26 @@
 	});
 </script>
 
-<div class="flex flex-col h-dvh w-screen overflow-hidden">
-	<ConnectionBanner />
-	<UpdateBanner />
+{#if authStore.authState === 'loading'}
+	<LoadingScreen isVisible={true} progress={30} loadingText="Connecting..." />
+{:else if authStore.authState === 'setup'}
+	<SetupPage />
+{:else if authStore.authState === 'login'}
+	<LoginPage />
+{:else if authStore.authState === 'invite'}
+	<InvitePage />
+{:else}
+	<!-- authState === 'ready' -->
+	<div class="flex flex-col h-dvh w-screen overflow-hidden">
+		<ConnectionBanner />
+		<UpdateBanner />
 
-	<div class="flex-1 min-h-0">
-		<WorkspaceLayout>
-			{#snippet children()}
-				<!-- Main content will be here -->
-				<!-- TODO: Add SPA router in Phase 3 if needed -->
-			{/snippet}
-		</WorkspaceLayout>
+		<div class="flex-1 min-h-0">
+			<WorkspaceLayout>
+				{#snippet children()}
+					<!-- Main content -->
+				{/snippet}
+			</WorkspaceLayout>
+		</div>
 	</div>
-</div>
+{/if}

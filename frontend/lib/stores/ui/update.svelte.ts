@@ -4,7 +4,7 @@
  */
 
 import ws from '$frontend/lib/utils/ws';
-import { settings } from '$frontend/lib/stores/features/settings.svelte';
+import { systemSettings } from '$frontend/lib/stores/features/settings.svelte';
 import { debug } from '$shared/utils/logger';
 
 interface UpdateState {
@@ -47,7 +47,7 @@ export async function checkForUpdate(): Promise<void> {
 		updateState.updateAvailable = result.updateAvailable;
 
 		// Auto-update if enabled and update is available
-		if (result.updateAvailable && settings.autoUpdate) {
+		if (result.updateAvailable && systemSettings.autoUpdate) {
 			debug.log('server', 'Auto-update enabled, starting update...');
 			await runUpdate();
 		}

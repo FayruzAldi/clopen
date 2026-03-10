@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { settings, updateSettings } from '$frontend/lib/stores/features/settings.svelte';
+	import { systemSettings, updateSystemSettings } from '$frontend/lib/stores/features/settings.svelte';
 	import { updateState, checkForUpdate, runUpdate } from '$frontend/lib/stores/ui/update.svelte';
 	import Icon from '../../common/Icon.svelte';
 
 	function toggleAutoUpdate() {
-		updateSettings({ autoUpdate: !settings.autoUpdate });
+		updateSystemSettings({ autoUpdate: !systemSettings.autoUpdate });
 	}
 
 	function handleCheckNow() {
@@ -108,14 +108,14 @@
 			<button
 				type="button"
 				role="switch"
-				aria-checked={settings.autoUpdate}
+				aria-checked={systemSettings.autoUpdate}
 				onclick={toggleAutoUpdate}
 				class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-violet-500/30
-					{settings.autoUpdate ? 'bg-violet-600' : 'bg-slate-300 dark:bg-slate-600'}"
+					{systemSettings.autoUpdate ? 'bg-violet-600' : 'bg-slate-300 dark:bg-slate-600'}"
 			>
 				<span
 					class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out
-						{settings.autoUpdate ? 'translate-x-5' : 'translate-x-0'}"
+						{systemSettings.autoUpdate ? 'translate-x-5' : 'translate-x-0'}"
 				></span>
 			</button>
 		</div>

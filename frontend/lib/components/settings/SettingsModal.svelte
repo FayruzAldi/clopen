@@ -9,6 +9,7 @@
 		settingsSections,
 		type SettingsSection
 	} from '$frontend/lib/stores/ui/settings-modal.svelte';
+	import { authStore } from '$frontend/lib/stores/features/auth.svelte';
 
 	// Import settings components
 	import ModelSettings from './model/ModelSettings.svelte';
@@ -17,6 +18,8 @@
 	import UserSettings from './user/UserSettings.svelte';
 	import NotificationSettings from './notifications/NotificationSettings.svelte';
 	import GeneralSettings from './general/GeneralSettings.svelte';
+	import UserManagement from './admin/UserManagement.svelte';
+	import InviteManagement from './admin/InviteManagement.svelte';
 
 	// Responsive state
 	let isMobileMenuOpen = $state(false);
@@ -25,6 +28,12 @@
 	const isMobile = $derived(windowWidth < 768);
 	const isOpen = $derived(settingsModalState.isOpen);
 	const activeSection = $derived(settingsModalState.activeSection);
+	const isAdmin = $derived(authStore.isAdmin);
+
+	// Filter sections: hide admin-only tabs for non-admins
+	const visibleSections = $derived(
+		settingsSections.filter(s => !s.adminOnly || isAdmin)
+	);
 
 	// Handle section change
 	function handleSectionChange(section: SettingsSection) {
@@ -149,7 +158,7 @@
 					{/if}
 
 					<nav class="flex-1 overflow-y-auto p-3">
-						{#each settingsSections as section (section.id)}
+						{#each visibleSections as section (section.id)}
 							<button
 								type="button"
 								class="flex items-start gap-3 w-full py-3 px-3.5 bg-transparent border-none rounded-lg text-slate-500 text-sm text-left cursor-pointer transition-all duration-150 mb-1
@@ -218,6 +227,13 @@
 						{:else if activeSection === 'general'}
 							<div in:fly={{ x: 20, duration: 200 }}>
 								<GeneralSettings />
+							</div>
+						{:else if activeSection === 'admin' && isAdmin}
+							<div in:fly={{ x: 20, duration: 200 }}>
+								<UserManagement />
+								<div class="mt-6">
+									<InviteManagement />
+								</div>
 							</div>
 						{/if}
 					</div>

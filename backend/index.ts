@@ -28,6 +28,17 @@ import { statSync } from 'node:fs';
 // Import WebSocket router
 import { wsRouter } from './ws';
 
+// Auth middleware
+import { checkRouteAccess } from './lib/auth/permissions';
+import { ws as wsServer } from './lib/utils/ws';
+
+// Register auth gate on WebSocket router — blocks unauthenticated/unauthorized access
+wsRouter.setAuthMiddleware(async (conn, action) => {
+	const isAuth = wsServer.isAuthenticated(conn);
+	const role = wsServer.getRole(conn);
+	return checkRouteAccess(action, isAuth, role);
+});
+
 /**
  * Clopen - Elysia Backend Server
  *

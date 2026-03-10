@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { updateState, runUpdate, dismissUpdate, checkForUpdate } from '$frontend/lib/stores/ui/update.svelte';
-	import { settings, updateSettings } from '$frontend/lib/stores/features/settings.svelte';
+	import { systemSettings, updateSystemSettings } from '$frontend/lib/stores/features/settings.svelte';
 	import Icon from '$frontend/lib/components/common/Icon.svelte';
 	import { slide } from 'svelte/transition';
 
@@ -22,7 +22,7 @@
 	}
 
 	function toggleAutoUpdate() {
-		updateSettings({ autoUpdate: !settings.autoUpdate });
+		updateSystemSettings({ autoUpdate: !systemSettings.autoUpdate });
 	}
 
 	function handleRetry() {

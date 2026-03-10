@@ -7,3 +7,4 @@ export { dbUtils } from './utils-queries';
 export { snapshotQueries } from './snapshot-queries';
 export { checkpointQueries } from './checkpoint-queries';
 export { engineQueries } from './engine-queries';
+export { authQueries } from './auth-queries';

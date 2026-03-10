@@ -31,6 +31,7 @@ interface CLIOptions {
 	help?: boolean;
 	version?: boolean;
 	update?: boolean;
+	resetPat?: boolean;
 }
 
 // Get version from package.json
@@ -95,6 +96,7 @@ USAGE:
 
 COMMANDS:
   update                  Update clopen to the latest version
+  reset-pat               Regenerate admin Personal Access Token
 
 OPTIONS:
   -p, --port <number>     Port to run the server on (default: ${DEFAULT_PORT})
@@ -107,6 +109,7 @@ EXAMPLES:
   clopen --port 9150      # Start on port 9150
   clopen --host 0.0.0.0   # Bind to all network interfaces
   clopen update           # Update to the latest version
+  clopen reset-pat        # Regenerate admin login token
   clopen --version        # Show version
 
 For more information, visit: https://github.com/myrialabs/clopen
@@ -165,6 +168,10 @@ function parseArguments(): CLIOptions {
 
 			case 'update':
 				options.update = true;
+				break;
+
+			case 'reset-pat':
+				options.resetPat = true;
 				break;
 
 			default:
@@ -248,6 +255,31 @@ async function runUpdate() {
 
 	console.log(`✓ Updated to v${latestVersion}`);
 	console.log('\n  Restart clopen to apply the update.');
+}
+
+async function recoverAdminToken() {
+	const version = getVersion();
+	console.log(`\x1b[36mClopen\x1b[0m v${version} — Admin Token Recovery\n`);
+
+	// Initialize database (import dynamically to avoid loading full backend)
+	const { initializeDatabase } = await import('../backend/lib/database/index');
+	const { listUsers, regeneratePAT } = await import('../backend/lib/auth/auth-service');
+
+	await initializeDatabase();
+
+	const users = listUsers();
+	const admin = users.find(u => u.role === 'admin');
+
+	if (!admin) {
+		console.error('❌ No admin user found. Start clopen first to complete setup.');
+		process.exit(1);
+	}
+
+	const newPAT = regeneratePAT(admin.id);
+
+	console.log(`  Admin  : ${admin.name}`);
+	console.log(`  New PAT: \x1b[32m${newPAT}\x1b[0m`);
+	console.log(`\n  Use this token to log in. Keep it safe — it won't be shown again.`);
 }
 
 async function setupEnvironment() {
@@ -397,6 +429,13 @@ async function main() {
 		// Run update if requested
 		if (options.update) {
 			await runUpdate();
+			process.exit(0);
+		}
+
+		// Recover admin token if requested
+		if (options.resetPat) {
+			await setupEnvironment();
+			await recoverAdminToken();
 			process.exit(0);
 		}
 
