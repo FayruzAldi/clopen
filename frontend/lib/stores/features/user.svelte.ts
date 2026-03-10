@@ -1,96 +1,54 @@
 /**
  * User Store - Svelte 5 Runes
- * Manages anonymous user state and provides reactive updates
+ *
+ * Delegates to auth store for user identity.
+ * Kept for backward compatibility with components that import userStore.
  */
 
-import { getOrCreateAnonymousUser, updateAnonymousUserName, getCurrentAnonymousUser, type AnonymousUser } from '$shared/utils/anonymous-user';
+import { authStore } from './auth.svelte';
 import { debug } from '$shared/utils/logger';
 import ws from '$frontend/lib/utils/ws';
 
-// User state - initialize with null, will be properly set after async load
-let currentUser = $state<AnonymousUser | null>(null);
-let isInitializing = $state<boolean>(false);
+// Re-export user type from auth store
+export type { AuthUser as AnonymousUser } from './auth.svelte';
 
-// User store
+// User store (delegates to auth store)
 export const userStore = {
 	get currentUser() {
-		return currentUser;
+		const user = authStore.currentUser;
+		if (!user) return null;
+		// Return in the shape expected by existing components
+		return {
+			id: user.id,
+			name: user.name,
+			color: user.color,
+			avatar: user.avatar,
+			createdAt: user.createdAt
+		};
 	},
 
 	get isInitializing() {
-		return isInitializing;
+		return authStore.authState === 'loading';
 	},
 
-	// Initialize user (called on app start)
+	// No-op: auth store handles initialization before WorkspaceLayout mounts
 	async initialize() {
-		if (typeof window === 'undefined') {
-			debug.warn('user', 'Cannot initialize user on server side');
-			return;
-		}
-
-		if (isInitializing) {
-			debug.warn('user', 'User initialization already in progress');
-			return;
-		}
-
-		isInitializing = true;
-
-		try {
-			// First check if user already exists in localStorage (fast path)
-			const existingUser = getCurrentAnonymousUser();
-			if (existingUser) {
-				currentUser = existingUser;
-				// Sync user context with WebSocket (for user-targeted broadcasting)
-				// IMPORTANT: Must await to ensure server has context before other operations
-				await ws.setUser(existingUser.id);
-				debug.log('user', '✅ Loaded existing user from localStorage:', existingUser.name);
-			} else {
-				// Generate new user from server
-				debug.log('user', 'No existing user, generating from server...');
-				const newUser = await getOrCreateAnonymousUser();
-				currentUser = newUser;
-				// Sync user context with WebSocket
-				// IMPORTANT: Must await to ensure server has context before other operations
-				if (newUser) {
-					await ws.setUser(newUser.id);
-				}
-			}
-		} catch (error) {
-			debug.error('user', 'Failed to initialize user:', error);
-		} finally {
-			isInitializing = false;
-		}
+		debug.log('user', 'initialize() called — auth store handles this');
 	},
 
-	// Update user name
+	// Update user name via auth store
 	async updateName(newName: string): Promise<boolean> {
-		if (typeof window === 'undefined') {
-			return false;
-		}
-
 		try {
-			const updatedUser = await updateAnonymousUserName(newName);
-
-			if (updatedUser) {
-				currentUser = updatedUser;
-				return true;
-			}
-
-			return false;
+			await authStore.updateName(newName);
+			return true;
 		} catch (error) {
 			debug.error('user', 'Failed to update user name:', error);
 			return false;
 		}
 	},
 
-	// Refresh user from localStorage
+	// No-op: user data comes from auth store
 	refresh() {
-		if (typeof window !== 'undefined') {
-			const user = getCurrentAnonymousUser();
-			if (user) {
-				currentUser = user;
-				debug.log('user', '✅ Refreshed user from localStorage:', user.name);
-			}
-		}
+		debug.log('user', 'refresh() called — user data comes from auth store');
 	}
 };

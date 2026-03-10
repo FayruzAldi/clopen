@@ -11,7 +11,8 @@ export type SettingsSection =
 	| 'appearance'
 	| 'user'
 	| 'notifications'
-	| 'general';
+	| 'general'
+	| 'admin';
 
 interface SettingsModalState {
 	isOpen: boolean;
@@ -19,12 +20,15 @@ interface SettingsModalState {
 }
 
 // Settings sections metadata
-export const settingsSections: Array<{
+export interface SettingsSectionMeta {
 	id: SettingsSection;
 	label: string;
 	icon: IconName;
 	description: string;
-}> = [
+	adminOnly?: boolean;
+}
+
+export const settingsSections: SettingsSectionMeta[] = [
 	{
 		id: 'model',
 		label: 'Model',
@@ -60,6 +64,13 @@ export const settingsSections: Array<{
 		label: 'General',
 		icon: 'lucide:settings-2',
 		description: 'Data management and security'
+	},
+	{
+		id: 'admin',
+		label: 'Admin',
+		icon: 'lucide:shield',
+		description: 'Team and invite management',
+		adminOnly: true
 	}
 ];
 

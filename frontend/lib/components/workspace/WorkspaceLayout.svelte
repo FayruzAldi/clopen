@@ -26,8 +26,7 @@
 	import { initializeProjects } from '$frontend/lib/stores/core/projects.svelte';
 	import { initializeSessions } from '$frontend/lib/stores/core/sessions.svelte';
 	import { initializeNotifications } from '$frontend/lib/stores/ui/notification.svelte';
-	import { applyServerSettings } from '$frontend/lib/stores/features/settings.svelte';
-	import { userStore } from '$frontend/lib/stores/features/user.svelte';
+	import { applyServerSettings, loadSystemSettings } from '$frontend/lib/stores/features/settings.svelte';
 	import { initPresence } from '$frontend/lib/stores/core/presence.svelte';
 	import ws from '$frontend/lib/utils/ws';
 	import { debug } from '$shared/utils/logger';
@@ -78,14 +77,9 @@
 			initializeNotifications();
 			initializeWorkspace();
 
-			// Step 2: Initialize user + wait for WebSocket in parallel
-			// userStore.initialize() reads localStorage (fast) and sets WS context locally.
-			// waitUntilConnected() waits for WS to connect and sync any pending context.
+			// Step 2: WebSocket is already connected (auth completed before this mounts)
 			setProgress(20, 'Connecting...');
-			await Promise.all([
-				userStore.initialize(),
-				ws.waitUntilConnected(10000)
-			]);
+			await ws.waitUntilConnected(10000);
 
 			// Step 3: Restore user state from server
 			setProgress(30, 'Restoring state...');
@@ -97,13 +91,14 @@
 				debug.warn('workspace', 'Failed to restore server state, using defaults:', err);
 			}
 
-			// Step 4: Apply restored state + setup presence (sync operations)
+			// Step 4: Apply restored state + load system settings + setup presence
 			setProgress(40);
 			if (serverState?.settings) {
 				applyServerSettings(serverState.settings);
 			}
 			restoreLastView(serverState?.lastView);
 			restoreUnreadSessions(serverState?.unreadSessions);
+			await loadSystemSettings();
 			initPresence();
 
 			// Step 5: Load projects (with server-restored currentProjectId)

@@ -6,7 +6,7 @@
 	import Dialog from './Dialog.svelte';
 	import { debug } from '$shared/utils/logger';
 	import ws from '$frontend/lib/utils/ws';
-	import { settings } from '$frontend/lib/stores/features/settings.svelte';
+	import { systemSettings } from '$frontend/lib/stores/features/settings.svelte';
 	
 	interface FileItem {
 		name: string;
@@ -43,7 +43,7 @@
 	let deleteFolderConfirmName = $state('');
 
 	// Derived: whether directory access is restricted
-	const hasRestrictions = $derived(settings.allowedBasePaths && settings.allowedBasePaths.length > 0);
+	const hasRestrictions = $derived(systemSettings.allowedBasePaths && systemSettings.allowedBasePaths.length > 0);
 
 	// Detect backend OS from current path (drive letter = Windows)
 	const isWindows = $derived(/^[A-Za-z]:/.test(currentPath));
@@ -89,13 +89,13 @@
 
 	// Check if a path is accessible (within allowed base paths)
 	function isPathAllowed(path: string): boolean {
-		if (!settings.allowedBasePaths || settings.allowedBasePaths.length === 0) return true;
-		return settings.allowedBasePaths.some(base => isWithinBase(path, base));
+		if (!systemSettings.allowedBasePaths || systemSettings.allowedBasePaths.length === 0) return true;
+		return systemSettings.allowedBasePaths.some(base => isWithinBase(path, base));
 	}
 
 	// Check if current path is at the restriction boundary (cannot go up)
 	const atRestrictionBoundary = $derived(
-		hasRestrictions && settings.allowedBasePaths.some(base => pathsEqual(currentPath, base))
+		hasRestrictions && systemSettings.allowedBasePaths.some(base => pathsEqual(currentPath, base))
 	);
 
 	// Get available drives/mount points for all platforms
@@ -128,8 +128,8 @@
 	// Get user's home directory or current working directory
 	async function getInitialPath(): Promise<string> {
 		// If restrictions are set, start at the first allowed base path
-		if (settings.allowedBasePaths && settings.allowedBasePaths.length > 0) {
-			return settings.allowedBasePaths[0];
+		if (systemSettings.allowedBasePaths && systemSettings.allowedBasePaths.length > 0) {
+			return systemSettings.allowedBasePaths[0];
 		}
 
 		try {
@@ -225,7 +225,7 @@
 
 			// Enforce access restrictions
 			if (!isPathAllowed(currentPath)) {
-				error = `Access restricted. Allowed paths: ${settings.allowedBasePaths.join(', ')}`;
+				error = `Access restricted. Allowed paths: ${systemSettings.allowedBasePaths.join(', ')}`;
 				items = [];
 				return;
 			}
@@ -546,7 +546,7 @@
 					<div class="flex items-center gap-2 flex-wrap">
 						{#if hasRestrictions}
 							<!-- Restricted mode: show allowed base paths as quick access -->
-							{#each settings.allowedBasePaths as basePath (basePath)}
+							{#each systemSettings.allowedBasePaths as basePath (basePath)}
 								<button
 									onclick={() => navigateToLocation(basePath)}
 									class="px-3 py-1.5 text-xs rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 transition-colors"

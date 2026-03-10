@@ -221,6 +221,9 @@ export class WSClient<TAPI extends { client: any; server: any }> {
 		projectId: null
 	};
 
+	/** Session token for re-authentication on reconnection */
+	private sessionToken: string | null = null;
+
 	/** Pending context sync (for reconnection) */
 	private pendingContextSync = false;
 
@@ -272,8 +275,18 @@ export class WSClient<TAPI extends { client: any; server: any }> {
 				this.reconnectAttempts = 0;
 				this.options.onStatusChange?.('connected', 0);
 
-				// Sync context on reconnection - MUST await before flushing queue
-				if (this.context.userId || this.context.projectId) {
+				// Re-authenticate on reconnection using stored session token
+				if (this.sessionToken) {
+					try {
+						await this.http('auth:login' as any, { token: this.sessionToken } as any);
+						debug.log('websocket', 'Re-authenticated after reconnection');
+					} catch (err) {
+						debug.error('websocket', 'Failed to re-authenticate on reconnection:', err);
+					}
+				}
+
+				// Sync project context on reconnection (userId set by auth above)
+				if (this.context.projectId) {
 					try {
 						await this.syncContext();
 						debug.log('websocket', 'Context synced after reconnection');
@@ -570,18 +583,23 @@ export class WSClient<TAPI extends { client: any; server: any }> {
 	private contextSyncPromise: Promise<void> | null = null;
 
 	/**
-	 * Set user context (auto-syncs with server)
-	 * @returns Promise that resolves when context is synced with server
+	 * Set session token for reconnection auth.
+	 * Called by auth store after successful login.
+	 */
+	setSessionToken(token: string | null): void {
+		this.sessionToken = token;
+		debug.log('websocket', 'Session token set for reconnection auth');
+	}
+
+	/**
+	 * Set user context locally (for reconnection tracking).
+	 * userId is now set server-side by auth handlers — this only updates the local cache.
 	 */
 	async setUser(userId: string | null): Promise<void> {
 		if (this.context.userId === userId) return;
-
 		this.context.userId = userId;
-		debug.log('websocket', 'Context: user set to', userId);
-
-		if (this.isConnected) {
-			await this.syncContext();
-		}
+		debug.log('websocket', 'Context: user set locally to', userId);
+		// Note: userId is NOT synced via ws:set-context — it's set server-side by auth handlers
 	}
 
 	/**
@@ -679,16 +697,15 @@ export class WSClient<TAPI extends { client: any; server: any }> {
 			// Register response listener
 			unsubResponse = this.on('ws:set-context:response' as any, handleResponse);
 
-			// Send context sync request
+			// Send context sync request (only projectId — userId is set server-side by auth)
 			this.emit('ws:set-context' as any, {
 				requestId,
 				data: {
-					userId: this.context.userId,
 					projectId: this.context.projectId
 				}
 			} as any);
 
-			debug.log('websocket', 'Context sync sent:', this.context);
+			debug.log('websocket', 'Context sync sent: projectId=', this.context.projectId);
 		});
 	}
 

@@ -279,9 +279,21 @@ export class WSRouter<
 	private httpRoutes = new Map<string, HTTPRoute>();
 	private eventSchemas = new Map<string, TSchema>();
 
+	/** Optional auth middleware — called before every route handler */
+	private authMiddleware: ((conn: WSConnection, action: string) => Promise<{ allowed: boolean; error?: string }>) | null = null;
+
 	constructor() {
 		// Register built-in context management route
 		this.registerContextHandler();
+	}
+
+	/**
+	 * Set an auth middleware function that gates all route handlers.
+	 * The middleware receives the connection and action, and returns { allowed, error? }.
+	 * If not allowed, the handler is not called and an auth:error event is sent to the client.
+	 */
+	setAuthMiddleware(fn: (conn: WSConnection, action: string) => Promise<{ allowed: boolean; error?: string }>): void {
+		this.authMiddleware = fn;
 	}
 
 	/**
@@ -292,7 +304,6 @@ export class WSRouter<
 		this.httpRoutes.set('ws:set-context', {
 			action: 'ws:set-context',
 			dataSchema: t.Object({
-				userId: t.Optional(t.Union([t.String(), t.Null()])),
 				projectId: t.Optional(t.Union([t.String(), t.Null()]))
 			}),
 			responseSchema: t.Object({
@@ -303,9 +314,8 @@ export class WSRouter<
 				// Import ws server to update context
 				const { ws: wsServer } = await import('$backend/lib/utils/ws');
 
-				if (data.userId !== undefined) {
-					wsServer.setUser(conn, data.userId);
-				}
+				// userId is set exclusively by auth handlers (auth:login, auth:setup, auth:accept-invite)
+				// ws:set-context only handles projectId
 				if (data.projectId !== undefined) {
 					wsServer.setProject(conn, data.projectId);
 				}
@@ -575,6 +585,34 @@ export class WSRouter<
 				debug.error('websocket', 'Invalid message format');
 				return;
 			}
+
+			// ═══ AUTH GATE ═══
+			if (this.authMiddleware) {
+				const authResult = await this.authMiddleware(conn, action);
+				if (!authResult.allowed) {
+					try {
+						// If this is an HTTP route, send error as HTTP-style response
+						// so ws.http() on the client receives it instead of timing out
+						if (this.httpRoutes.has(action)) {
+							const requestId = payload?.requestId;
+							conn.send(JSON.stringify({
+								action: `${action}:response`,
+								payload: { success: false, error: authResult.error, requestId }
+							}));
+						} else {
+							conn.send(JSON.stringify({
+								action: 'auth:error',
+								payload: { error: authResult.error, blockedAction: action }
+							}));
+						}
+					} catch {
+						// Connection may be closed
+					}
+					debug.warn('websocket', `Auth blocked: ${action} — ${authResult.error}`);
+					return;
+				}
+			}
+			// ═══ END AUTH GATE ═══
 
 			// Check if this is an HTTP route
 			const httpRoute = this.httpRoutes.get(action);

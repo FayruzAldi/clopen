@@ -67,6 +67,12 @@ interface ConnectionState {
 	chatSessionIds: Set<string>;
 	/** Cleanup functions called automatically on unregister (connection close) */
 	cleanups: Set<() => void>;
+	/** Whether this connection has been authenticated */
+	authenticated: boolean;
+	/** User role (admin or member) — set by auth handler */
+	role: 'admin' | 'member' | null;
+	/** Hash of the session token used for this connection */
+	sessionTokenHash: string | null;
 }
 
 /**
@@ -140,7 +146,7 @@ class WSServer {
 		const id = crypto.randomUUID();
 		this.rawToId.set(raw, id);
 		this.connections.set(id, conn);
-		this.connectionState.set(id, { userId: null, projectId: null, chatSessionIds: new Set(), cleanups: new Set() });
+		this.connectionState.set(id, { userId: null, projectId: null, chatSessionIds: new Set(), cleanups: new Set(), authenticated: false, role: null, sessionTokenHash: null });
 
 		this.metrics.totalConnections = this.connections.size;
 		debug.log('websocket', `Connection registered: ${id} (total: ${this.connections.size})`);
@@ -514,6 +520,64 @@ class WSServer {
 		const id = this.resolveId(conn);
 		if (!id) return undefined;
 		return this.connectionState.get(id);
+	}
+
+	/**
+	 * Set authentication state for a connection.
+	 * Called by auth handlers after successful login/setup/invite.
+	 */
+	setAuth(conn: WSConnection, userId: string, role: 'admin' | 'member', sessionTokenHash: string): void {
+		const wsId = this.ensureRegistered(conn);
+		const state = this.connectionState.get(wsId);
+		if (state) {
+			state.authenticated = true;
+			state.role = role;
+			state.sessionTokenHash = sessionTokenHash;
+		}
+		// Also set userId via existing method (handles room management)
+		this.setUser(conn, userId);
+		debug.log('websocket', `Connection ${wsId} authenticated: userId=${userId}, role=${role}`);
+	}
+
+	/**
+	 * Get the role for a connection.
+	 */
+	getRole(conn: WSConnection): 'admin' | 'member' | null {
+		const id = this.resolveId(conn);
+		if (!id) return null;
+		return this.connectionState.get(id)?.role ?? null;
+	}
+
+	/**
+	 * Check if a connection is authenticated.
+	 */
+	isAuthenticated(conn: WSConnection): boolean {
+		const id = this.resolveId(conn);
+		if (!id) return false;
+		return this.connectionState.get(id)?.authenticated ?? false;
+	}
+
+	/**
+	 * Get remote IP address of a connection.
+	 */
+	getRemoteAddress(conn: WSConnection): string {
+		const raw = (conn as any).raw;
+		return raw?.remoteAddress ?? 'unknown';
+	}
+
+	/**
+	 * Clear authentication state for a connection (logout).
+	 */
+	clearAuth(conn: WSConnection): void {
+		const id = this.resolveId(conn);
+		if (!id) return;
+		const state = this.connectionState.get(id);
+		if (state) {
+			state.authenticated = false;
+			state.role = null;
+			state.sessionTokenHash = null;
+		}
+		debug.log('websocket', `Connection ${id} auth cleared`);
 	}
 
 	/**
