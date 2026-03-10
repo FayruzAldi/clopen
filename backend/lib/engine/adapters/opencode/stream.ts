@@ -40,7 +40,7 @@ import {
 	convertSubtaskToolUseOnly,
 	getToolInput,
 } from './message-converter';
-import { ensureClient, getClient } from './server';
+import { ensureClient, getClient, getServerUrl } from './server';
 import { debug } from '$shared/utils/logger';
 
 /** Map SDK Model.status to our category */
@@ -75,6 +75,8 @@ export class OpenCodeEngine implements AIEngine {
 	private activeAbortController: AbortController | null = null;
 	private activeSessionId: string | null = null;
 	private activeProjectPath: string | null = null;
+	/** Pending question requests keyed by tool callID → { requestId, questions } */
+	private pendingQuestions = new Map<string, { requestId: string; questions: Array<{ question: string }> }>();
 
 	get isInitialized(): boolean {
 		return this._isInitialized;
@@ -102,6 +104,7 @@ export class OpenCodeEngine implements AIEngine {
 	 */
 	async dispose(): Promise<void> {
 		await this.cancel();
+		this.pendingQuestions.clear();
 		this._isInitialized = false;
 		debug.log('engine', 'Open Code engine instance disposed');
 	}
@@ -664,6 +667,39 @@ export class OpenCodeEngine implements AIEngine {
 							break;
 						}
 
+						// v2 question event — emitted when the question tool needs user input
+						case 'question.asked': {
+							const props = evt.properties as {
+								id: string;
+								sessionID: string;
+								questions: Array<{ question: string; header: string; options: Array<{ label: string; description: string }> }>;
+								tool?: { messageID: string; callID: string };
+							};
+							if (props.sessionID !== sessionId) break;
+							if (props.tool?.callID) {
+								this.pendingQuestions.set(props.tool.callID, {
+									requestId: props.id,
+									questions: props.questions,
+								});
+								debug.log('engine', `[OC] question.asked: stored question ${props.id} for callID ${props.tool.callID}`);
+							}
+							break;
+						}
+
+						// v2 permission event — auto-approve to avoid blocking the session
+						// (tool permissions like file_write, bash, etc. are bypassed)
+						case 'permission.asked':
+						case 'permission.updated': {
+							const props = evt.properties as {
+								id: string;
+								sessionID: string;
+								callID?: string;
+							};
+							if (props.sessionID !== sessionId) break;
+							this.autoApprovePermission(props.id, props.sessionID);
+							break;
+						}
+
 						case 'session.error': {
 							const errorProps = (event as EventSessionError).properties;
 							// Only handle errors for our session (sessionID is optional on errors)
@@ -729,6 +765,7 @@ export class OpenCodeEngine implements AIEngine {
 			this.activeAbortController = null;
 			this.activeSessionId = null;
 			this.activeProjectPath = null;
+			this.pendingQuestions.clear();
 		}
 	}
 
@@ -754,6 +791,7 @@ export class OpenCodeEngine implements AIEngine {
 		this._isActive = false;
 		this.activeSessionId = null;
 		this.activeProjectPath = null;
+		this.pendingQuestions.clear();
 	}
 
 	/**
@@ -777,6 +815,142 @@ export class OpenCodeEngine implements AIEngine {
 	async interrupt(): Promise<void> {
 		// Open Code SDK doesn't have a separate interrupt — use cancel
 		await this.cancel();
+	}
+
+	/**
+	 * Resolve a pending AskUserQuestion by replying via the OpenCode question API.
+	 *
+	 * Flow:
+	 * 1. If a `question.asked` event was received → use stored requestId to reply
+	 * 2. Fallback → fetch pending questions from GET /question and match by callID
+	 *
+	 * The reply is sent to POST /question/{requestID}/reply with answers
+	 * ordered by the original questions array.
+	 */
+	resolveUserAnswer(toolUseId: string, answers: Record<string, string>): boolean {
+		const pending = this.pendingQuestions.get(toolUseId);
+
+		if (pending) {
+			// Convert Record<questionText, answerLabel> → Array<Array<string>> ordered by questions
+			const orderedAnswers = pending.questions.map(q => {
+				const answer = answers[q.question];
+				return answer ? [answer] : [];
+			});
+			this.replyToQuestion(pending.requestId, orderedAnswers);
+			this.pendingQuestions.delete(toolUseId);
+			return true;
+		}
+
+		// Fallback: fetch pending questions from the API and find matching one
+		debug.log('engine', `resolveUserAnswer: No stored question for toolUseId ${toolUseId}, fetching from API...`);
+		this.fetchAndReplyToQuestion(toolUseId, answers);
+		return true;
+	}
+
+	/**
+	 * POST /question/{requestID}/reply to send user answers back to the OpenCode server.
+	 */
+	private replyToQuestion(requestId: string, orderedAnswers: string[][]): void {
+		const serverUrl = getServerUrl();
+		if (!serverUrl) {
+			debug.warn('engine', 'replyToQuestion: Server URL not available');
+			return;
+		}
+
+		const dirParam = this.activeProjectPath ? `?directory=${encodeURIComponent(this.activeProjectPath)}` : '';
+		const url = `${serverUrl}/question/${requestId}/reply${dirParam}`;
+		debug.log('engine', `Replying to question ${requestId}:`, orderedAnswers);
+
+		fetch(url, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ answers: orderedAnswers }),
+		}).then(async res => {
+			if (res.ok) {
+				debug.log('engine', `Question reply accepted: ${requestId} (${res.status})`);
+			} else {
+				const body = await res.text().catch(() => '');
+				debug.error('engine', `Question reply failed: ${res.status} ${res.statusText}`, body);
+			}
+		}).catch(error => {
+			debug.error('engine', 'Failed to reply to question:', error);
+		});
+	}
+
+	/**
+	 * Fallback: GET /question to list pending questions, find the matching one, and reply.
+	 */
+	private async fetchAndReplyToQuestion(toolUseId: string, answers: Record<string, string>): Promise<void> {
+		const serverUrl = getServerUrl();
+		if (!serverUrl) {
+			debug.warn('engine', 'fetchAndReplyToQuestion: Server URL not available');
+			return;
+		}
+
+		try {
+			const dirParam = this.activeProjectPath ? `?directory=${encodeURIComponent(this.activeProjectPath)}` : '';
+			const res = await fetch(`${serverUrl}/question${dirParam}`);
+			if (!res.ok) {
+				debug.error('engine', `Failed to list pending questions: ${res.status}`);
+				return;
+			}
+
+			const questions = await res.json() as Array<{
+				id: string;
+				questions: Array<{ question: string }>;
+				tool?: { callID: string };
+			}>;
+
+			const matching = questions.find(q => q.tool?.callID === toolUseId);
+			if (!matching) {
+				debug.warn('engine', 'fetchAndReplyToQuestion: No matching question for toolUseId:', toolUseId);
+				return;
+			}
+
+			const orderedAnswers = matching.questions.map(q => {
+				const answer = answers[q.question];
+				return answer ? [answer] : [];
+			});
+			this.replyToQuestion(matching.id, orderedAnswers);
+		} catch (error) {
+			debug.error('engine', 'Failed to fetch and reply to question:', error);
+		}
+	}
+
+	/**
+	 * Auto-approve a permission request to avoid blocking the session.
+	 * Uses direct HTTP since the v1 client may not have the v2 permission.reply method.
+	 */
+	private autoApprovePermission(permissionId: string, sessionId: string): void {
+		const serverUrl = getServerUrl();
+		if (!serverUrl) return;
+
+		// Try v2 endpoint first (/permission/{requestID}/reply), fall back to v1
+		fetch(`${serverUrl}/permission/${permissionId}/reply`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ reply: 'once' }),
+		}).then(res => {
+			if (res.ok) {
+				debug.log('engine', `[OC] auto-approved permission ${permissionId} (v2)`);
+				return;
+			}
+			// v2 endpoint not available — try v1
+			const client = getClient();
+			if (client) {
+				client.postSessionIdPermissionsPermissionId({
+					path: { id: sessionId, permissionID: permissionId },
+					body: { response: 'once' },
+					...(this.activeProjectPath && { query: { directory: this.activeProjectPath } }),
+				}).then(() => {
+					debug.log('engine', `[OC] auto-approved permission ${permissionId} (v1)`);
+				}).catch(err => {
+					debug.error('engine', 'Failed to auto-approve permission (v1):', err);
+				});
+			}
+		}).catch(error => {
+			debug.error('engine', 'Failed to auto-approve permission:', error);
+		});
 	}
 
 	/**
