@@ -122,9 +122,9 @@
 	// Model Picker (existing logic)
 	// ════════════════════════════════════════════
 
-	// Track whether a chat has started (any user message in current session)
+	// Track whether a chat has started (any user message in current session, or session has history e.g. restored to initial)
 	const hasStartedChat = $derived(
-		sessionState.messages.some(m => m.type === 'user')
+		sessionState.messages.some(m => m.type === 'user') || sessionState.hasMessageHistory
 	);
 
 	// Engine lock: once chat starts, the engine is locked for this session.

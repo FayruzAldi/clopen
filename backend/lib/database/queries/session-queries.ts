@@ -189,6 +189,19 @@ export const sessionQueries = {
 	},
 
 	/**
+	 * Clear the HEAD pointer (set to NULL).
+	 * Used when restoring to the initial state (before any messages).
+	 */
+	clearHead(sessionId: string): void {
+		const db = getDatabase();
+		db.prepare(`
+			UPDATE chat_sessions
+			SET current_head_message_id = NULL
+			WHERE id = ?
+		`).run(sessionId);
+	},
+
+	/**
 	 * Get current HEAD message ID for a session
 	 */
 	getHead(sessionId: string): string | null {

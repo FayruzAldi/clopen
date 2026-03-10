@@ -24,10 +24,11 @@
 
 	const { showMobileHeader = false }: Props = $props();
 
-	// Welcome state - don't show during restoration
+	// Welcome state - don't show during restoration or when session has history (restored to initial)
 	const isWelcomeState = $derived(
 		sessionState.messages.length === 0 &&
-		!appState.isRestoring
+		!appState.isRestoring &&
+		!sessionState.hasMessageHistory
 	);
 
 	// Check if we should show input (not during restoration)

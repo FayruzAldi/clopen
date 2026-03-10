@@ -285,16 +285,19 @@ export class SnapshotService {
 	 */
 	async checkRestoreConflicts(
 		sessionId: string,
-		targetCheckpointMessageId: string,
+		targetCheckpointMessageId: string | null,
 		projectPath?: string
 	): Promise<RestoreConflictCheck> {
 		const sessionSnapshots = snapshotQueries.getBySessionId(sessionId);
 
-		const targetIndex = sessionSnapshots.findIndex(
-			s => s.message_id === targetCheckpointMessageId
-		);
+		// null = restore to initial state (before all snapshots)
+		const isInitialRestore = targetCheckpointMessageId === null;
 
-		if (targetIndex === -1) {
+		const targetIndex = isInitialRestore
+			? -1
+			: sessionSnapshots.findIndex(s => s.message_id === targetCheckpointMessageId);
+
+		if (!isInitialRestore && targetIndex === -1) {
 			return { hasConflicts: false, conflicts: [], checkpointsToUndo: [] };
 		}
 
@@ -302,6 +305,7 @@ export class SnapshotService {
 		// This determines ALL files that would be affected by the restore
 		const expectedState = new Map<string, string>(); // filepath → expectedHash
 
+		// For initial restore, targetIndex=-1, so this loop doesn't execute (correct: no forward changes)
 		for (let i = 0; i <= targetIndex; i++) {
 			const snap = sessionSnapshots[i];
 			if (!snap.session_changes) continue;
@@ -313,6 +317,7 @@ export class SnapshotService {
 			} catch { /* skip malformed */ }
 		}
 
+		// For initial restore, all snapshots are "after target" → revert all to oldHash
 		for (let i = targetIndex + 1; i < sessionSnapshots.length; i++) {
 			const snap = sessionSnapshots[i];
 			if (!snap.session_changes) continue;
@@ -354,8 +359,11 @@ export class SnapshotService {
 
 		// Determine reference time for cross-session conflict check
 		// Use min(targetTime, currentHeadTime) to cover both undo and redo
-		const targetSnapshot = sessionSnapshots[targetIndex];
-		const targetTime = targetSnapshot.created_at;
+		// For initial restore, use the session's created_at or the earliest snapshot time
+		const targetSnapshot = isInitialRestore ? null : sessionSnapshots[targetIndex];
+		const targetTime = targetSnapshot
+			? targetSnapshot.created_at
+			: (sessionSnapshots[0]?.created_at || new Date(0).toISOString());
 		let referenceTime = targetTime;
 
 		const currentHead = sessionQueries.getHead(sessionId);
@@ -384,7 +392,9 @@ export class SnapshotService {
 
 		// Check for cross-session conflicts
 		const conflicts: RestoreConflict[] = [];
-		const projectId = targetSnapshot.project_id;
+		const projectId = targetSnapshot
+			? targetSnapshot.project_id
+			: (sessionSnapshots[0]?.project_id || '');
 		const allProjectSnapshots = this.getAllProjectSnapshots(projectId);
 
 		for (const otherSnap of allProjectSnapshots) {
@@ -481,17 +491,20 @@ export class SnapshotService {
 	async restoreSessionScoped(
 		projectPath: string,
 		sessionId: string,
-		targetCheckpointMessageId: string,
+		targetCheckpointMessageId: string | null,
 		conflictResolutions?: ConflictResolution
 	): Promise<{ restoredFiles: number; skippedFiles: number }> {
 		try {
 			const sessionSnapshots = snapshotQueries.getBySessionId(sessionId);
 
-			const targetIndex = sessionSnapshots.findIndex(
-				s => s.message_id === targetCheckpointMessageId
-			);
+			// null = restore to initial state (before all snapshots)
+			const isInitialRestore = targetCheckpointMessageId === null;
 
-			if (targetIndex === -1) {
+			const targetIndex = isInitialRestore
+				? -1
+				: sessionSnapshots.findIndex(s => s.message_id === targetCheckpointMessageId);
+
+			if (!isInitialRestore && targetIndex === -1) {
 				debug.warn('snapshot', 'Target checkpoint snapshot not found');
 				return { restoredFiles: 0, skippedFiles: 0 };
 			}
@@ -501,6 +514,7 @@ export class SnapshotService {
 			const expectedState = new Map<string, string>();
 
 			// Walk snapshots from first to target (inclusive): apply forward changes
+			// For initial restore (targetIndex=-1), this loop doesn't execute
 			for (let i = 0; i <= targetIndex; i++) {
 				const snap = sessionSnapshots[i];
 				if (!snap.session_changes) continue;
@@ -513,6 +527,7 @@ export class SnapshotService {
 			}
 
 			// Walk snapshots after target: files changed only after target need reverting to oldHash
+			// For initial restore, ALL snapshots are "after target" → revert everything
 			for (let i = targetIndex + 1; i < sessionSnapshots.length; i++) {
 				const snap = sessionSnapshots[i];
 				if (!snap.session_changes) continue;
