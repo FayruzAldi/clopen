@@ -14,6 +14,7 @@ import { debug } from '$shared/utils/logger';
 import {
 	buildCheckpointTree,
 	getCheckpointPathToRoot,
+	findCheckpointForHead,
 	findSessionEnd,
 	INITIAL_NODE_ID
 } from '../../lib/snapshot/helpers';
@@ -147,7 +148,7 @@ export const restoreHandler = createRouter()
 		}
 
 		// Regular checkpoint restore
-		// 1. Get the checkpoint message
+		// 1. Get the target message
 		const checkpointMessage = messageQueries.getById(messageId);
 		if (!checkpointMessage) {
 			throw new Error('Checkpoint message not found');
@@ -159,9 +160,19 @@ export const restoreHandler = createRouter()
 
 		// 3. Get all messages and build checkpoint tree
 		const allMessages = messageQueries.getAllBySessionId(sessionId);
-		const { parentMap } = buildCheckpointTree(allMessages);
+		const { checkpoints, parentMap } = buildCheckpointTree(allMessages);
 
-		// 4. Find session end (last message of checkpoint's session)
+		// 3b. Resolve the correct checkpoint for snapshot/tree operations
+		// The target message may be a non-checkpoint (e.g., assistant response)
+		// when called from edit mode. Walk back to find the nearest ancestor checkpoint.
+		const checkpointIdSet = new Set(checkpoints.map(c => c.id));
+		const resolvedCheckpointId = checkpointIdSet.has(messageId)
+			? messageId
+			: findCheckpointForHead(messageId, allMessages, checkpointIdSet);
+
+		debug.log('snapshot', `Resolved checkpoint: ${resolvedCheckpointId} (target was ${messageId})`);
+
+		// 4. Find session end (last message of target's session)
 		const sessionEnd = findSessionEnd(checkpointMessage, allMessages);
 		debug.log('snapshot', `Session end: ${sessionEnd.id}`);
 
@@ -197,12 +208,17 @@ export const restoreHandler = createRouter()
 		}
 
 		// 6. Update checkpoint_tree_state for ancestors
-		const checkpointPath = getCheckpointPathToRoot(messageId, parentMap);
-		if (checkpointPath.length > 1) {
-			checkpointQueries.updateActiveChildrenAlongPath(sessionId, checkpointPath);
+		// Use resolved checkpoint ID (not raw messageId which may be a non-checkpoint)
+		if (resolvedCheckpointId) {
+			const checkpointPath = getCheckpointPathToRoot(resolvedCheckpointId, parentMap);
+			if (checkpointPath.length > 1) {
+				checkpointQueries.updateActiveChildrenAlongPath(sessionId, checkpointPath);
+			}
 		}
 
 		// 7. Restore file system state using session-scoped restore
+		// Use resolved checkpoint ID so the snapshot lookup matches correctly
+		// (snapshots are keyed by checkpoint user message IDs, not assistant messages)
 		let filesRestored = 0;
 		let filesSkipped = 0;
 
@@ -213,7 +229,7 @@ export const restoreHandler = createRouter()
 				const result = await snapshotService.restoreSessionScoped(
 					project.path,
 					sessionId,
-					messageId,
+					resolvedCheckpointId,
 					conflictResolutions
 				);
 				filesRestored = result.restoredFiles;
